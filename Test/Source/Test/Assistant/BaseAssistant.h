@@ -35,7 +35,7 @@ private:
 	//Todo : Make UBaseStatusManager And Change this
 	UPROPERTY(VisibleAnywhere, Category = "Status")
 		class ABaseWeapon* Weapon;
-	class UStaticMesh* WeaponMesh;
+	class USkeletalMesh* WeaponMesh;
 	UPROPERTY(VisibleAnywhere, Category = "Status")
 		class UCharacterStatusManager* _StatusManager;
 

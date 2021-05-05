@@ -8,6 +8,10 @@
 #include "GameFramework/Actor.h"
 #include "BaseWeapon.generated.h"
 
+class USkeletalMeshComponent;
+class UBoxComponent;
+class UParticleSystemComponent;
+
 UCLASS()
 class TEST_API ABaseWeapon : public AActor
 {
@@ -27,17 +31,36 @@ public:
 
 	UFUNCTION()
 		void OnOverlapBegin(class UPrimitiveComponent* OverlappedComp, class AActor* OtherActor, class UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
-	UFUNCTION()
-		void OnOverlapEnd(class UPrimitiveComponent* OverlappedComp, class AActor* OtherActor, class UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
+
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mesh", meta = (AllowPrivateAccess = "true"))
-	class UStaticMeshComponent* Mesh;
+	class USkeletalMeshComponent* Mesh;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collision", meta = (AllowPrivateAccess = "true"))
 	class UBoxComponent* Collision;
 
+	UPROPERTY(VisibleAnywhere,  Category = "Trail", meta = (AllowPrivateAccess = "true"))
+		class UParticleSystemComponent* TrailParticle;
+	UPROPERTY(VisibleAnywhere,  Category = "Trail", meta = (AllowPrivateAccess = "true"))
+		TSubclassOf<UParticleSystem> TrailTemplate;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Status", meta = (AllowPrivateAccess = "true"))
 	FBaseStatus Status;
+
+	TArray<class ABaseMonster*> DamagedMonster;
+
+	class ACharacter* WeaponOwner;
+	float DamageRate;
 public:
-	void SetUpWeapon(EWeaponType type,UStaticMesh* mesh);
+	void SetUpWeapon(EWeaponType type, USkeletalMesh* mesh, ACharacter* owner);
 	void SetEnableWeapon(bool value);
+	bool HitCheck(class AActor* Actor);
+	void ResetDamagedMonster();
+	void SetOverlapEvent(bool IsOn);
+	void SetDamageRate(float value);
+
+	void TrailOn(ETrailWidthMode type,float value);
+	void TrailOff();
+private:
+	FVector CurrentBoxSize;
+	FVector CurrentBoxLocation;
 };

@@ -6,6 +6,7 @@
 #include "../WeaponAnimTable.h"
 #include "Engine/DataTable.h"
 #include "../BaseEnum.h"
+#include "../BaseStatus.h"
 #include "Components/ActorComponent.h"
 #include "Containers/Queue.h"
 #include "../Player/BaseCharAnimInstance.h"
@@ -15,52 +16,9 @@
 #define COMMAND_DRAWWEAPON "Draw"
 #define COMMAND_PUTUPWEAPON "PutUp"
 #define COMMAND_EVADE "Evade"
-#define INPUT_BUFFER_DELAY 0.05f
+#define INPUT_BUFFER_DELAY 0.15f
 
-
-USTRUCT(BlueprintType)
-struct FInputInfo {
-	GENERATED_USTRUCT_BODY()
-public:
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
-		EInputKey InputType;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
-		float  TimeStamp;
-	bool operator==(const FInputInfo& other) const;
-};
-
-USTRUCT(BlueprintType)
-struct FCommand {
-	GENERATED_USTRUCT_BODY()
-public:
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
-		TArray<EInputKey> Inputs;
-};
-USTRUCT(BlueprintType)
-struct FChainAction {
-	GENERATED_USTRUCT_BODY()
-public:
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FString AttackName;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		int32 Priority;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		TArray<FCommand> Commands;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		UAnimMontage* ActionMontage;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		TArray<FString> EnableChainAction;
-};
-USTRUCT(BlueprintType)
-struct FChainActionTable : public FTableRowBase
-{
-	GENERATED_USTRUCT_BODY()
-
-public:
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FChainAction Action;
-
-};
+class UComandTableManager;
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class TEST_API UInputBufferManager : public UActorComponent
@@ -79,49 +37,61 @@ public:
 	// Called every frame
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
+private:
+	UPROPERTY(VisibleAnywhere, Category = "Input")
+		UComandTableManager* CommandTable;
+
+	UPROPERTY(VisibleAnywhere, Category = "Input", meta = (AllowPrivateAccess = "true"))
+		TArray<FMoveInputInfo> MoveInputBuffer;
+	UPROPERTY(VisibleAnywhere, Category = "Input",meta = (AllowPrivateAccess = "true"))
+		TArray<FActionInputInfo> ActionInputBuffer;
+
+	bool bPressedW = false;
+	bool bPressedS = false;
+	bool bPressedD = false;
+	bool bPressedA = false;
+
 public:
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
-		TArray<FInputInfo> InputBuffer;
-
-	float removeInputFromBufferTime;
-
-	FVoidDelegate EvadeDelegate;
-	FVoidDelegate CommandUpdateDelegate;
+	FVoidDelegateAnimMontage PlayAnimEventDel;
 private:
 	UPROPERTY(VisibleAnywhere, Category = "State")
-	EWeaponType CurrentWeapon;
+		EWeaponType CurrentWeapon;
 	UPROPERTY(VisibleAnywhere, Category = "State")
-	ECharacterState CurrentState;
+		ECharacterState CurrentState;
 	UPROPERTY(VisibleAnywhere, Category = "State")
-	FString CurrentCommandName;
-	UPROPERTY(VisibleAnywhere, Category = "State")
-	UBaseCharAnimInstance* TargetAnimInst;
-	UPROPERTY(VisibleAnywhere, Category = "State")
-	bool CanAcitonInput;
-
-	TMap<EWeaponType, TMap<FString, FChainAction>> TotalCommands;
-	TMap<FString, FChainAction>* CurrentCommands;
-	TArray<FString>* EnableAction;
+		FString CurrentActionName;
+	UPROPERTY(VisibleAnywhere, Category = "BufferState")
+		bool CanBufferInput = true;
 
 public:
-	UFUNCTION(BlueprintCallable)
-		void AddInputToInputBuffer(FInputInfo input);
-	UFUNCTION()
-		void CheckInputBufferCommand();
+	FORCEINLINE void SetCommandTable(UComandTableManager* table);
+	FORCEINLINE void InputBufferOpen();
+	FORCEINLINE void InputBufferClose();
+	FORCEINLINE void SetPressedW(bool value);
+	FORCEINLINE void SetPressedS(bool value);
+	FORCEINLINE void SetPressedD(bool value);
+	FORCEINLINE void SetPressedA(bool value);
 
-	void CheckBufferTime();
-	void ChangeCommandDT(EWeaponType weapon);
-	UAnimMontage* ActiveCommand(FString NextCommand);
-	void SetTargetAnimInst(UBaseCharAnimInstance* anim) { TargetAnimInst = anim; }
-	void SetCharacterState(ECharacterState type) { CurrentState = type; }
+	void AddInputToInputBuffer(FMoveInputInfo input);
+	void AddInputToInputBuffer(FActionInputInfo input);
 
+	void ChangeCharacterState(ECharacterState state);
+	void ChangeWeapon(EWeaponType weapon);
+
+	void ReadyForNextAction(FString newActionName);
+
+	void SetCurrentAction(FString actionName);
 	void ChainReset();
 	void PutUpWeapon();
-	inline void InputBufferOpen() { CanAcitonInput = true; }
-	inline void InputBufferClose() { CanAcitonInput = false; }
-	TArray<FString> GetEnableAction() { return *EnableAction; }
-	TArray<EInputKey> GetCommandFromName(FString commandName) { return ((CurrentCommands->Find(commandName)->Commands[0]).Inputs); }
+
+//	TArray<EInputKey> GetCommandFromName(FString commandName) { return ((CurrentCommands->Find(commandName)->Commands[0]).Inputs); }
 
 private:
-	bool BufferCheckDelay();
+	bool CheckCommand();
+	bool MoveCommnadCheck(TArray<EMoveKey> Command,float& LastInput);
+	bool ActionCommnadCheck(TArray<EActionKey> Command, float& FirstInput);
+	void ActionBufferCheck();
+	void MoveBufferCheck();
+	void MoveAddInput(bool Pressed, FMoveInputInfo input);
+	void PlayAnimation(FString actionName);
 };

@@ -37,7 +37,9 @@ private:
 public:	
 
 	FVoidDelegate OnStatusUpdate;
-	FVoidDelegateOne OnChangeCharacterState;
+	FVoidDelegate OnCharacterDeadDel;
+	FVoidDelegate OnStaminaZeroDel;
+
 	// Called every frame
 
 	void StatusInit();
@@ -45,11 +47,18 @@ public:
 	void ReGen(const float deltaTime);
 	bool UseStamina();
 
-	float GetHpRate() { return CharacterStatus.CurrentHp / CharacterStatus.MaxHp; }
-	float GetStaminaRate() { return CharacterStatus.CurrentStamina / CharacterStatus.MaxStamina; }
+	float GetHpRate();
+	float GetStaminaRate();
+	float GetDamage();
+	float GetCritical();
 
-	void SetIsSprint(bool value) { IsSprint = value; }
+	void SetIsSprint(bool value);
+	int32 TakeDamage(float Damage);
+
 private:
 	void CreateCharState();
 	void UpdateStatus();
+
+	void RegenStamina(float delta);
+	void SprintUseStamina(float delta);
 };

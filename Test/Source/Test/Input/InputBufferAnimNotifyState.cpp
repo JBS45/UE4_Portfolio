@@ -38,7 +38,7 @@ void UInputBufferAnimNotifyState::NotifyTick(USkeletalMeshComponent * MeshComp, 
 void UInputBufferAnimNotifyState::NotifyEnd(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation)
 {
 	Super::NotifyEnd(MeshComp, Animation);
-
+	
 	auto buffer = GetInputBuffer(MeshComp);
 	if (IsValid(buffer)) {
 		buffer->InputBufferClose();
@@ -51,11 +51,12 @@ FString UInputBufferClose::GetNotifyName_Implementation() const {
 void UInputBufferClose::Notify(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation)
 {
 	Super::Notify(MeshComp, Animation);
-
+	
 	auto buffer = GetInputBuffer(MeshComp);
 	if (IsValid(buffer)) {
 		buffer->InputBufferClose();
 	}
+	
 }
 
 FString UAnimChainReset::GetNotifyName_Implementation() const {
@@ -64,11 +65,12 @@ FString UAnimChainReset::GetNotifyName_Implementation() const {
 void UAnimChainReset::Notify(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation)
 {
 	Super::Notify(MeshComp, Animation);
-
+	
 	auto buffer = GetInputBuffer(MeshComp);
 	if (IsValid(buffer)) {
 		buffer->ChainReset();
 	}
+	
 }
 
 FString UDrawWeapon::GetNotifyName_Implementation() const {
@@ -77,11 +79,11 @@ FString UDrawWeapon::GetNotifyName_Implementation() const {
 void UDrawWeapon::Notify(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation)
 {
 	Super::Notify(MeshComp, Animation);
-	TESTLOG(Warning, TEXT("??"));
 
 	auto PlayerCharater = Cast<ABaseCharacter>(MeshComp->GetOwner());
-	PlayerCharater->DrawWeapon();
+
 	if (IsValid(PlayerCharater)) {
+		PlayerCharater->DrawWeapon();
 		auto PlayerController = Cast<ABasePlayerController>(PlayerCharater->Controller);
 		if (IsValid(PlayerController)) {
 			PlayerController->ChangeCharacterState(ECharacterState::E_BATTLE);
@@ -97,12 +99,13 @@ void UPutUpWeapon::Notify(USkeletalMeshComponent * MeshComp, UAnimSequenceBase *
 {
 	Super::Notify(MeshComp, Animation);
 
-	auto PlayerCharater = Cast<ABaseCharacter>(MeshComp->GetOwner());
-	PlayerCharater->PutUpWeapon();
+	auto PlayerCharater = Cast<ABaseCharacter>(MeshComp->GetOwner());;
 	if (IsValid(PlayerCharater)) {
+		PlayerCharater->PutUpWeapon();
 		auto PlayerController = Cast<ABasePlayerController>(PlayerCharater->Controller);
 		if (IsValid(PlayerController)) {
 			PlayerController->ChangeCharacterState(ECharacterState::E_IDLE);
 		}
 	}
+	
 }

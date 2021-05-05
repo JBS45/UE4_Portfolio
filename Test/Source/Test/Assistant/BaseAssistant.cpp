@@ -42,9 +42,9 @@ ABaseAssistant::ABaseAssistant()
 		GetMesh()->SetAnimInstanceClass(MESH_ANIM.Class);
 	}
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh>SM_MESH(TEXT("StaticMesh'/Game/Meshes/CrudeHammer.CrudeHammer'"));
-	if (SM_MESH.Succeeded()) {
-		WeaponMesh = SM_MESH.Object;
+	static ConstructorHelpers::FObjectFinder<USkeletalMesh>WEAPON_MESH(TEXT("SkeletalMesh'/Game/InfinityBladeWeapons/Weapons/Blunt/Blunt_CrudeHammer/SK_Blunt_CrudeHammer.SK_Blunt_CrudeHammer'"));
+	if (WEAPON_MESH.Succeeded()) {
+		WeaponMesh = WEAPON_MESH.Object;
 	}
 
 
@@ -64,10 +64,11 @@ ABaseAssistant::ABaseAssistant()
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 	GetCharacterMovement()->RotationRate = FRotator(0, 540, 0);
 	GetCharacterMovement()->bUseRVOAvoidance = true;
-
+	/*
 	AIControllerClass = AAssistantAIController::StaticClass();
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
-
+	*/
+	
 	SetUpSkill();
 }
 
@@ -80,7 +81,7 @@ void ABaseAssistant::BeginPlay()
 	Weapon = GetWorld()->SpawnActor<ABaseWeapon>();
 	Weapon->SetActorScale3D(FVector::OneVector*0.6f);
 	Weapon->SetEnableWeapon(true);
-	Weapon->SetUpWeapon(EWeaponType::E_HAMMER, WeaponMesh);
+	Weapon->SetUpWeapon(EWeaponType::E_HAMMER, WeaponMesh,this);
 	Weapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName(TEXT("Weapon")));
 
 

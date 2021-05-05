@@ -6,7 +6,13 @@
 #include "Components/StaticMeshComponent.h"
 #include "BasePlayerController.h"
 #include "../Monster/BaseMonster.h"
+#include "../Monster/MonsterAIController.h"
 #include "../Components/DetectComponent.h"
+#include "Components/PostProcessComponent.h"
+#include "TimerManager.h"
+#include "DrawDebugHelpers.h"
+#include "../Input/InputBufferManager.h"
+#include "Kismet/KismetMathLibrary.h"
 
 // Sets default values
 ABaseCharacter::ABaseCharacter()
@@ -42,6 +48,11 @@ ABaseCharacter::ABaseCharacter()
 	bUseControllerRotationYaw = false;
 	bUseControllerRotationRoll = false;
 
+	GetCharacterMovement()->bOrientRotationToMovement = true;
+	GetCharacterMovement()->RotationRate = FRotator(0, 540, 0);
+	GetCharacterMovement()->MaxAcceleration = RunSpeed;
+	GetCharacterMovement()->MaxWalkSpeed = BasicSpeed;
+
 	/*Mesh */
 	static ConstructorHelpers::FObjectFinder<USkeletalMesh> SK_MESH(TEXT("/Game/ODSMannequin/Mannequin/Character/Mesh/SK_Mannequin.SK_Mannequin"));
 
@@ -57,33 +68,36 @@ ABaseCharacter::ABaseCharacter()
 		GetMesh()->SetAnimInstanceClass(MESH_ANIM.Class);
 	}
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh>SM_MESH(TEXT("StaticMesh'/Game/Meshes/Talon.Talon'"));
-	if (SM_MESH.Succeeded()) {
-		TempMesh = SM_MESH.Object;
+	static ConstructorHelpers::FObjectFinder<USkeletalMesh>WEAPON_MESH(TEXT("SkeletalMesh'/Game/InfinityBladeWeapons/Weapons/Dual_Blade/Dual_Blade_Talon/SK_Dual_Blade_Talon.SK_Dual_Blade_Talon'"));
+	if (WEAPON_MESH.Succeeded()) {
+		TempMesh = WEAPON_MESH.Object;
 	}
+	
+	CurrentState = ECharacterState::E_NONE;
 
-	IsDrawWeapon = false;
+	StatusManager = CreateDefaultSubobject<UCharacterStatusManager>(TEXT("STATUSMANAGER"));
+	StatusManager->StatusInit();
 
-
-	_MovementStatus = CreateDefaultSubobject<UMovementManager>(TEXT("MOVEMENT"));
-	_MovementStatus->SetCharacterMovement(GetCharacterMovement());
-	_MovementStatus->SetIsSprintForStat.BindUObject(this, &ABaseCharacter::SetIsSprint);
-
-	_StatusManager = CreateDefaultSubobject<UCharacterStatusManager>(TEXT("STATUSMANAGER"));
-	_StatusManager->StatusInit();
+	GetMesh()->SetCollisionObjectType(ECC_GameTraceChannel6);
+	GetMesh()->SetCollisionProfileName("PlayerHitBox");
+	GetMesh()->SetGenerateOverlapEvents(true);
+	GetMesh()->CanCharacterStepUpOn = ECanBeCharacterBase::ECB_No;
 
 	
-	_CollisionManager = CreateDefaultSubobject<UHumanCollisionManager>(TEXT("COLLISIONMANAGER"));
-	_CollisionManager->SetUpAttachSocket(GetMesh());
-	_CollisionManager->SetUpCollisionType(FName(TEXT("PlayerHitBox")), ECollisionChannel::ECC_GameTraceChannel5);
+	CollisionManager = CreateDefaultSubobject<UHumanCollisionManager>(TEXT("COLLISIONMANAGER"));
+	CollisionManager->SetUpCharacterStatusManager(this);
+	CollisionManager->InitHitBox(nullptr,GetMesh());
 
-	_Detect = CreateDefaultSubobject<UDetectComponent>(TEXT("DETECTMANAGER"));
-	_Detect->SetDetectRange(DetectRange, EDetectCollisionType::E_MONSTER);
-	_Detect->GetDetect()-> SetupAttachment(GetCapsuleComponent());
-
-	_WeaponType = EWeaponType::E_NOWEAPON;
+	Detect = CreateDefaultSubobject<UDetectComponent>(TEXT("DETECTMANAGER"));
+	Detect->SetDetectRange(DetectRange, EDetectCollisionType::E_MONSTER);
+	Detect->GetDetect()-> SetupAttachment(GetCapsuleComponent());
 
 
+	PostProcessMat = CreateDefaultSubobject<UPostProcessComponent>(TEXT("POSTPROCESS"));
+
+	WeaponType = EWeaponType::E_NOWEAPON;
+
+	Tags.Add(PlayerTag);
 
 }
 
@@ -94,17 +108,21 @@ void ABaseCharacter::BeginPlay()
 	//TESTLOG_S(Warning);
 	//TESTLOG(Warning, TEXT("Actor Name : %s, Location X : %.3f"), *GetName(), GetActorLocation().X);
 
-	_AnimInst = Cast<UBaseCharAnimInstance>(GetMesh()->GetAnimInstance());
-
-	if (_AnimInst != nullptr) {
-		//TESTLOG(Warning, TEXT("valid"));
-		_AnimInst->ExchangeWeapon(_WeaponType);
-	}
+	AnimInst = Cast<UBaseCharAnimInstance>(GetMesh()->GetAnimInstance());
 
 	auto playerController = Cast<ABasePlayerController>(Controller);
-	playerController->GetInputBuffer()->SetTargetAnimInst(_AnimInst);
-	_StatusManager->OnChangeCharacterState.BindUObject(playerController, &ABasePlayerController::ChangeCharacterState);
 
+	playerController->ChangeStateDel.AddUObject(AnimInst, &UBaseCharAnimInstance::CharacterChangeState);
+	playerController->ChangeWeaponDel.AddUObject(AnimInst, &UBaseCharAnimInstance::ChangeWeapon);
+	playerController->GetInputBuffer()->PlayAnimEventDel.BindUObject(AnimInst, &UBaseCharAnimInstance::PlayAnimMontage);
+
+	playerController->ChangeStateDel.Broadcast(ECharacterState::E_IDLE);
+	playerController->ChangeWeaponDel.Broadcast(EWeaponType::E_DUAL);
+
+
+
+	GetMesh()->OnComponentBeginOverlap.AddDynamic(this, &ABaseCharacter::OnOverlapBegin);
+	GetMesh()->OnComponentEndOverlap.AddDynamic(this, &ABaseCharacter::OnOverlapEnd);
 
 }
 
@@ -124,9 +142,13 @@ void ABaseCharacter::PostInitializeComponents()
 void ABaseCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-	_Detect->DrawDebug(this, DeltaTime);
+	Detect->DrawDebug(this, DeltaTime);
 	auto control = Cast<ABasePlayerController>(GetController());
 	control->CameraLockOn(DeltaTime);
+
+	if (IsBlock) {
+		Blocking(DeltaTime);
+	}
 }
 
 // Called to bind functionality to input
@@ -162,8 +184,8 @@ void ABaseCharacter::CameraTurn(float NewAxisValue) {
 }
 void ABaseCharacter::Evade()
 {
-	if (_StatusManager->UseStamina()) {
-		_AnimInst->PlayEvade();
+	if (StatusManager->UseStamina()) {
+		AnimInst->PlayEvade();
 	}
 }
 void ABaseCharacter::CameraZoom(float NewAxisValue) {
@@ -180,34 +202,27 @@ void ABaseCharacter::MoveCameraMaxDist() {
 
 
 void ABaseCharacter::ChangeWeapon(EWeaponType type) {
-	if (_WeaponType == type) return;
-	_WeaponType = type;
+	if (WeaponType == type) return;
+	WeaponType = type;
 
-	switch (_WeaponType) {
+	switch (WeaponType) {
 		case EWeaponType::E_NOWEAPON:
 			LeftHand->SetEnableWeapon(false);
 			RightHand->SetEnableWeapon(false);
 			break;
 		case EWeaponType::E_DUAL:
-			LeftHand->SetUpWeapon(EWeaponType::E_DUAL, TempMesh);
-			RightHand->SetUpWeapon(EWeaponType::E_DUAL, TempMesh);
+			LeftHand->SetUpWeapon(EWeaponType::E_DUAL, TempMesh, this);
+			RightHand->SetUpWeapon(EWeaponType::E_DUAL, TempMesh, this);
 			LeftHand->SetEnableWeapon(true);
 			RightHand->SetEnableWeapon(true);
-
 			break;
 		case EWeaponType::E_HAMMER:
 			break;
 	}
 
 }
-void ABaseCharacter::SetMovement(EMovementState state) {
-	_MovementStatus->SetMovementState(state);
-}
-void ABaseCharacter::SetIsSprint(bool value) {
-	_StatusManager->SetIsSprint(value);
-}
 TArray<APawn*> ABaseCharacter::GetTargetMonster() { 
-	return _Detect->GetTargets(); 
+	return Detect->GetTargets(); 
 }
 
 void ABaseCharacter::SetInitWeapon() {
@@ -218,7 +233,10 @@ void ABaseCharacter::SetInitWeapon() {
 	RightHand->SetEnableWeapon(true);
 
 	LeftHand->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale,FName(TEXT("LeftWeapon")));
-	RightHand->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName(TEXT("RightWeapon")));
+	RightHand->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale,FName(TEXT("RightWeapon")));
+
+	WeaponLeftOverlapOff();
+	WeaponRightOverlapOff();
 }
 
 void ABaseCharacter::DrawWeapon() {
@@ -239,5 +257,200 @@ void ABaseCharacter::PutUpWeapon() {
 
 		LeftHand->SetActorRelativeLocation(FVector::ZeroVector);
 		RightHand->SetActorRelativeLocation(FVector::ZeroVector);
+	}
+}
+
+bool ABaseCharacter::CaculateCritical() {
+	auto CriticalChance = FMath::RandRange(0, 100);
+	if (StatusManager->GetCritical() >= CriticalChance) {
+		return true;
+	}
+	else {
+		return false;
+	}
+}
+void ABaseCharacter::RadialBlurOn() {
+	if (PostProcessMat->Settings.WeightedBlendables.Array.Num() <= 0) return;
+	auto BlurMat = PostProcessMat->Settings.WeightedBlendables.Array[0];
+	if (BlurMat.Object != nullptr) {
+		PostProcessMat->BlendWeight = 1.0f;
+		FTimerManager& TimerManager = GetWorldTimerManager();
+		TimerManager.SetTimer(CheckTimer,this, &ABaseCharacter::RadialBlurOff, 1.5f, false, 1.5f);
+	}
+}
+void ABaseCharacter::RadialBlurOff(){
+	if (PostProcessMat->Settings.WeightedBlendables.Array.Num() <= 0) return;
+	auto BlurMat = PostProcessMat->Settings.WeightedBlendables.Array[0];
+	if (BlurMat.Object != nullptr) {
+		PostProcessMat->BlendWeight = 0.0f;
+
+	}
+}
+
+void ABaseCharacter::ApplyDamageFunc(const FHitResult& hit, const float AcitonDamageRate, const EDamageType DamageType, const float ImpactForce) {
+	auto TargetActor = hit.Actor;
+
+	float CaculateDamage = 0;
+
+	bool IsCritical = false;
+	bool IsWeak = false;
+	int32 FinalDamage = 0;
+
+	if (CaculateCritical()) {
+		CaculateDamage = StatusManager->GetDamage() * 1.25f;
+		IsCritical = true;
+
+	}
+	else {
+		CaculateDamage = StatusManager->GetDamage();
+		IsCritical = false;
+	}
+
+	CaculateDamage *= AcitonDamageRate;
+
+	TESTLOG(Warning, TEXT("%f"), CaculateDamage);
+	Cast<IDamageInterface>(TargetActor)->TakeDamageFunc(IsWeak, FinalDamage,this, hit, CaculateDamage, DamageType, ImpactForce);
+	TESTLOG(Warning, TEXT("%d"), FinalDamage);
+	AttackDel.Execute(Cast<ABasePlayerController>(GetController()), hit.ImpactPoint, FinalDamage, IsWeak);
+
+}
+void ABaseCharacter::TakeDamageFunc(bool& OutIsWeak, int32& OutFinalDamage, AActor* Causer,const FHitResult& hit, const float CaculateDamage, const EDamageType DamageType, const float ImpactForce) {
+	TESTLOG(Warning, TEXT("CaculateDamage : %f"), CaculateDamage);
+	OutFinalDamage = StatusManager->TakeDamage(CaculateDamage);
+
+	FVector Direction = GetActorLocation() - Causer->GetActorLocation();
+	Direction.Normalize();
+	Direction *= ImpactForce*3;
+
+	auto playerController = Cast<ABasePlayerController>(Controller);
+	playerController->ChangeStateDel.Broadcast(ECharacterState::E_HIT);
+
+	switch (DamageType) {
+	case EDamageType::E_NORMAL:
+		break;
+	case EDamageType::E_KNOCKBACK:
+		TESTLOG(Warning, TEXT("KnockBack"));
+		AnimInst->PlayKnockBack();
+		Direction += GetActorUpVector()*ImpactForce;
+		LaunchCharacter(Direction,false,false);
+		break;
+	case EDamageType::E_KNOCKDOWN:
+		AnimInst->PlayKnockBack();
+		Direction += GetActorUpVector()*ImpactForce;
+		LaunchCharacter(Direction, false, false);
+		break;
+	case EDamageType::E_ROAR:
+		RadialBlurOn();
+		break;
+	}
+}
+
+UBaseCharAnimInstance* ABaseCharacter::GetAnimInst() { 
+	return AnimInst; 
+}
+EWeaponType ABaseCharacter::GetWeaponState() { 
+	return WeaponType;
+}
+UCharacterStatusManager* ABaseCharacter::GetCharacterStatus() { 
+	return StatusManager; 
+}
+bool ABaseCharacter::GetIsAlive() const { 
+	return IsAlive; 
+}
+class ABaseWeapon* ABaseCharacter::GetLeftHand() {
+	return LeftHand;
+}
+class ABaseWeapon* ABaseCharacter::GetRightHand() {
+	return RightHand;
+}
+
+void ABaseCharacter::WeaponLeftOverlapOn() {
+	LeftHand->SetOverlapEvent(true);
+}
+void ABaseCharacter::WeaponLeftOverlapOff() {
+	LeftHand->SetOverlapEvent(false);
+}
+void ABaseCharacter::WeaponRightOverlapOn() {
+	RightHand->SetOverlapEvent(true);
+}
+void ABaseCharacter::WeaponRightOverlapOff() {
+	RightHand->SetOverlapEvent(false);
+}
+void ABaseCharacter::OnOverlapBegin(class UPrimitiveComponent* OverlappedComp, class AActor* OtherActor, class UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult) {
+	BlockTarget = OtherActor;
+}
+
+void ABaseCharacter::OnOverlapEnd(class UPrimitiveComponent* OverlappedComp, class AActor* OtherActor, class UPrimitiveComponent* OtherComp, int32 OtherBodyIndex) {
+	BlockTarget = nullptr;
+}
+
+FVector ABaseCharacter::BlockCheck(AActor* Actor) {
+
+	float Height = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+	float Radius = GetCapsuleComponent()->GetScaledCapsuleRadius();
+	FVector Location = GetCapsuleComponent()->GetComponentLocation();
+	FRotator Rotation = GetCapsuleComponent()->GetComponentRotation();
+
+	FHitResult DetectResult;
+	FCollisionQueryParams params(NAME_None, false, this);
+	GetWorld()->SweepSingleByChannel(
+		DetectResult,
+		Location,
+		Location,
+		Rotation.Quaternion(),
+		ECC_GameTraceChannel3,
+		FCollisionShape::MakeCapsule(Radius, Height),
+		params);
+
+	DrawDebugCapsule(GetWorld(), Location, Height, Radius, Rotation.Quaternion(), FColor::Orange, false, 1.0f);
+
+	FVector Direction = FVector::ZeroVector;
+	float Rate = 1.0f;
+	if (DetectResult.Actor == Actor) {
+		Direction = DetectResult.ImpactNormal*(-1.0f);
+		Direction.Normalize();
+		Rate = FVector::Distance(GetActorLocation(), DetectResult.ImpactPoint);
+	}
+
+	return Direction*(Radius - Rate);
+}
+
+void ABaseCharacter::Blocking(float delta) {
+	FVector MovementVector = BlockCheck(BlockTarget);
+	FVector Target = GetActorLocation() + MovementVector*0.5f;
+	SetActorLocation(Target);
+}
+void ABaseCharacter::CharacterChangeState(ECharacterState state){
+	if (CurrentState == state) return;
+	CurrentState = state;
+
+	switch (CurrentState) {
+		case ECharacterState::E_IDLE:
+			GetCharacterMovement()->Activate();
+			IsBlock = true;
+			break;
+		case ECharacterState::E_BATTLE:
+			IsBlock = true;
+			break;
+		case ECharacterState::E_HIT:
+			IsBlock = false;
+			break;
+		case ECharacterState::E_DOWN:
+			IsBlock = false;
+			break;
+		case ECharacterState::E_DEAD:
+			GetCapsuleComponent()->SetCollisionProfileName(FName(TEXT("DEAD")));
+			GetCharacterMovement()->Deactivate();
+			GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			IsBlock = false;
+			break;
+	}
+}
+void ABaseCharacter::SetIsSprint(bool value) {
+	if (value) {
+		GetCharacterMovement()->MaxWalkSpeed = BasicSpeed;
+	}
+	else {
+		GetCharacterMovement()->MaxWalkSpeed = RunSpeed;
 	}
 }

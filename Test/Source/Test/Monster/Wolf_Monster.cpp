@@ -6,13 +6,13 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "../Player/BaseCharacter.h"
 #include "MonsterAnimInstance.h"
-#include "../Collision/WolfCollisionManager.h"
 #include "MonsterArea.h"
 #include "MonsterAIController.h"
+#include "../Components/MonsterStatusManager.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
 AWolf_Monster::AWolf_Monster() {
-	Name = TEXT("Wolf");
+	MonsterID = 101;
 
 	//Root = CreateDefaultSubobject<UBoxComponent>("Base");
 
@@ -43,15 +43,9 @@ AWolf_Monster::AWolf_Monster() {
 	GetCharacterMovement()->MaxAcceleration = RunSpeed;
 	GetCharacterMovement()->MaxWalkSpeed = BasicSpeed;
 
-	MoveCollision = CreateDefaultSubobject<UCapsuleComponent>(TEXT("MOVECOLLISION"));
-	MoveCollision->SetupAttachment(GetCapsuleComponent());
-	MoveCollision->SetCollisionProfileName(TEXT("Monster"));
-	MoveCollision->CanCharacterStepUpOn = ECanBeCharacterBase::ECB_No;
-	MoveCollision->bDynamicObstacle = true;
-
-	HitBox = CreateDefaultSubobject<UWolfCollisionManager>(TEXT("HITBOX"));
-	HitBox->SetUpAttachSocket(GetMesh());
-	HitBox->SetUpCollisionType(FName(TEXT("MonsterHitBox")), ECollisionChannel::ECC_GameTraceChannel4);
+	//HitBox = CreateDefaultSubobject<UWolfCollisionManager>(TEXT("HITBOX"));
+	//HitBox->SetUpAttachSocket(GetMesh());
+	//HitBox->SetUpCollisionType(FName(TEXT("MonsterHitBox")), ECollisionChannel::ECC_GameTraceChannel4);
 
 /*	DamageBox = CreateDefaultSubobject<UWolfCollisionManager>(TEXT("DAMAGEBOX"));
 	DamageBox->SetUpAttachSocket(GetMesh());
@@ -73,6 +67,7 @@ AWolf_Monster::AWolf_Monster() {
 	RunSpeed = 800.0f;
 	GetCharacterMovement()->MaxAcceleration = RunSpeed;
 	
+	CurrentState = EMonsterState::E_CREATE;
 }
 
 void AWolf_Monster::BeginPlay()
@@ -92,59 +87,25 @@ void AWolf_Monster::SetupPlayerInputComponent(UInputComponent * PlayerInputCompo
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 }
 
-void AWolf_Monster::SetUpMonsterStatus()
-{
-	CurrentHp = MonsterStatus.MaxHp;
-	
-}
-void AWolf_Monster::SetArea(AMonsterArea* area) {
-	ActiveArea = area;
-}
-FString AWolf_Monster::AWolf_Monster::GetMonsterName(){ return Name; }
-AMonsterArea* AWolf_Monster::GetActiveArea() { return ActiveArea; }
-void AWolf_Monster::SetActiveArea(AMonsterArea* area) { ActiveArea = area; }
-void AWolf_Monster::SetPatrolNode(int max) {
-	MaxPatrolNode = max;
-	CurrentPatrolNode = 0;
-}
-void AWolf_Monster::NextPatrolNode() {
-	CurrentPatrolNode++; 
-	if (CurrentPatrolNode >= MaxPatrolNode) CurrentPatrolNode = 0;
-}
-int AWolf_Monster::GetCurrentPatrolNode() { return CurrentPatrolNode; }
-bool AWolf_Monster::GetIsAlive() { return IsAlive; }
-bool AWolf_Monster::GetIsFoundPlayer() { return IsFoundPlayer; }
-void AWolf_Monster::SetIsFoundPlayer(bool value) { IsFoundPlayer = value; }
-float AWolf_Monster::GetAggroChangeTerm() { return AggroChangeTerm; }
-TArray<APawn*> AWolf_Monster::GetTargetList() { return _Detect->GetTargets(); }
-float AWolf_Monster::GetAttackRange() { return AttackRange; }
-void AWolf_Monster::SetTarget(ACharacter* target) { Target = target; }
-EMonsterStateType AWolf_Monster::GetMonsterState() { return MonsterState; }
-void AWolf_Monster::ChangeMonsterState(EMonsterStateType type) {
-	if (MonsterState == type) return;
-	MonsterState = type;
-
-	switch (MonsterState)
-	{
-	case EMonsterStateType::E_NONE:
-		break;
-	case EMonsterStateType::E_IDLE:
-		GetCharacterMovement()->MaxWalkSpeed = BasicSpeed;
-		break;
-	case EMonsterStateType::E_FIND:
-		break;
-	case EMonsterStateType::E_BATTLE:
-		GetCharacterMovement()->MaxWalkSpeed = RunSpeed;
-		break;
-	case EMonsterStateType::E_HIT:
-		break;
-	case EMonsterStateType::E_DEAD:
-		break;
-	default:
-		break;
-	}
-}
 
 void AWolf_Monster::NotifyArea(ACharacter* target) {
 	ActiveArea->Notify(target);
+}
+
+bool AWolf_Monster::MonsterInit(FMonsterStatus status) {
+
+	Status->DeadDel.AddUObject(this, &AWolf_Monster::Dead);
+	CurrentState = EMonsterState::E_IDLE;
+
+	return false;
+}
+void AWolf_Monster::Dead() {
+	CurrentState = EMonsterState::E_DEAD;
+}
+void AWolf_Monster::ChangeMonsterState(EMonsterState state) {
+
+}
+
+bool AWolf_Monster::TakeDamageFromPlayer(const FHitResult& hit, const FName socketName, float dmg, int32& outDmage, bool& IsWeak) {
+	return false;
 }

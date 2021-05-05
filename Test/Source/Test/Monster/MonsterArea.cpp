@@ -2,10 +2,13 @@
 
 
 #include "MonsterArea.h"
+#include "../BaseGameMode.h"
 #include "../BaseEnum.h"
 #include "../Player/BaseCharacter.h"
+#include "Kismet/GameplayStatics.h"
 #include "DrawDebugHelpers.h"
-
+#include "MonsterAIController.h"
+#include "Components/SplineComponent.h"
 
 // Sets default values
 AMonsterArea::AMonsterArea()
@@ -15,27 +18,32 @@ AMonsterArea::AMonsterArea()
 
 	IsPlayerInRange = false;
 
-	DetectSphere = CreateDefaultSubobject<USphereComponent>(TEXT("DETECT"));
+	Area = CreateDefaultSubobject<USphereComponent>("AREA");
+	Area->SetCollisionProfileName("DetectPlayer");
 
-	DetectRange = 2000.0f;
-
-	DetectSphere->SetCollisionObjectType(ECC_GameTraceChannel1);
-	DetectSphere->SetSphereRadius(DetectRange);
-	DetectSphere->SetCollisionProfileName(TEXT("DetectPlayer"));
-
-	RootComponent = DetectSphere;
+	RootComponent = Area;
 	
 	Spawner = CreateDefaultSubobject<AMonsterSpawner>(TEXT("SPAWNER"));
 
+	Area->OnComponentBeginOverlap.AddDynamic(this, &AMonsterArea::OnOverlapBegin);
+	Area->OnComponentEndOverlap.AddDynamic(this, &AMonsterArea::OnOverlapEnd);
 }
 
 // Called when the game starts or when spawned
 void AMonsterArea::BeginPlay()
 {
 	Super::BeginPlay();
-	DetectSphere->OnComponentBeginOverlap.AddDynamic(this, &AMonsterArea::OnOverlapBegin);
-	DetectSphere->OnComponentEndOverlap.AddDynamic(this, &AMonsterArea::OnOverlapEnd);
+
+	if (SpawnMonsterType != nullptr) {
+
+		auto GameMode = Cast<ABaseGameMode>(UGameplayStatics::GetGameMode(GetWorld()));
+		auto MonsterID = SpawnMonsterType.GetDefaultObject()->GetMonsterID();
+		SpawnMonsterStatus = GameMode->GetMonsterData(MonsterID);
+	}
 	MonsterRegenTimer = MonsterRegenCoolTime;
+
+	AreaRange = Area->GetScaledSphereRadius();
+
 }
 
 // Called every frame
@@ -60,7 +68,7 @@ void AMonsterArea::OnOverlapEnd(class UPrimitiveComponent* OverlappedComp, class
 	}
 }
 void AMonsterArea::SpawnUpdate(float DeltaSeconds) {
-	if (!IsPlayerInRange) {
+	if (!IsPlayerInRange && MonsterRegenCoolTime >=0 ) {
 		CurrentMonsterCount = Monsters.Num();
 		MonsterRegenTimer += DeltaSeconds;
 
@@ -74,24 +82,38 @@ void AMonsterArea::SpawnUpdate(float DeltaSeconds) {
 	
 }
 void AMonsterArea::Spawn() {
-	if (SpawnMonsterType != nullptr) {
+	if (SpawnMonsterType != nullptr && SpawnPoint!=nullptr) {
 		ABaseMonster* result;
 		result = Spawner->SpawnMonster(SpawnMonsterType, SpawnPoint->GetActorLocation(), SpawnRange);
+		result->MonsterInit(SpawnMonsterStatus);
 		result->SetActiveArea(this);
-		result->SetPatrolNode(PatrolPoint.Num());
+		//Cast<AMonsterAIController>(result->GetController())->SetUpPatrolPoints(PatrolPoint);
 		Monsters.Add(result);
 	}
 	CurrentMonsterCount = Monsters.Num();
 }
 void AMonsterArea::Reset() {
-	for (auto monster : Monsters) {
+	/*for (auto monster : Monsters) {
 		monster->SetIsFoundPlayer(false);
-	}
+	}*/
 }
 void AMonsterArea::Notify(ACharacter* target) {
-	for (auto monster : Monsters) {
+	/*for (auto monster : Monsters) {
 		monster->SetIsFoundPlayer(true);
 		monster->SetTarget(target);
 		monster->ChangeMonsterState(EMonsterStateType::E_BATTLE);
-	}
+	}*/
+}
+
+float AMonsterArea::GetAreaRange() {
+	return AreaRange;
+}
+bool AMonsterArea::GetIsPlayerInRange() { 
+	return IsPlayerInRange; 
+}
+TArray<ATargetPoint*> AMonsterArea::GetPatrolPoint() {
+	return PatrolPoint; 
+}
+TArray<ABaseMonster*> AMonsterArea::GetMonsters() { 
+	return Monsters; 
 }

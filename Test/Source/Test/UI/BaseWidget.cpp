@@ -12,6 +12,9 @@
 #include "../Monster/BaseMonster.h"
 #include "../Player/BasePlayerController.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
+#include "DamageText.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/CanvasPanel.h"
 
 
 void UBaseWidget::NativeConstruct() {
@@ -21,11 +24,23 @@ void UBaseWidget::NativeConstruct() {
 	HPBar = Cast<UProgressBar>(PlayerStatusUI->GetWidgetFromName("HpBar"));
 	StaminaBar = Cast<UProgressBar>(PlayerStatusUI->GetWidgetFromName("StaminaBar"));
 	TargetMark = Cast<UTargetUI>(GetWidgetFromName("TargetMarkUI"));
+	auto Main = Cast<UCanvasPanel>(GetRootWidget());
 
+	if (Main != nullptr) {
+		WidgetTree->RootWidget = Main;
+	}
 	for (auto command : CommandBoxUI->GetAllChildren()) {
 		CommandBars.Add(Cast<UCommandWidget>(command));
 	}
 	TargetMark->SetVisibility(ESlateVisibility::Hidden);
+
+	for (int i = 0; i < PoolLimit; ++i) {
+		auto Damage = WidgetTree->ConstructWidget<UDamageText>(DamageText);
+		Damage->Init();
+		Damage->SetRenderScale(FVector2D(2, 2));
+		Main->AddChild(Damage);
+		DamageTextPool.Add(Damage);
+	}
 }
 void UBaseWidget::BindCharacterStatus(UCharacterStatusManager * status)
 {
@@ -33,14 +48,6 @@ void UBaseWidget::BindCharacterStatus(UCharacterStatusManager * status)
 		CurrentCharacterStatus = status;
 	}
 	CurrentCharacterStatus->OnStatusUpdate.BindUObject(this, &UBaseWidget::UpdateStatus);
-}
-
-void UBaseWidget::BindInputCommand(UInputBufferManager * inputbuffer)
-{
-	if (inputbuffer != nullptr) {
-		InputBuffer = inputbuffer;
-	}
-	InputBuffer->CommandUpdateDelegate.BindUObject(this, &UBaseWidget::UpdateCommand);
 }
 
 void UBaseWidget::UpdateStatus()
@@ -51,16 +58,12 @@ void UBaseWidget::UpdateStatus()
 	}
 }
 
-void UBaseWidget::UpdateCommand() {
-	for (auto slot : CommandBars) {
-		slot->HideWidget();
+void UBaseWidget::UpdateCommand(TArray<FChainAction> chain) {
+	for (auto bar : CommandBars) {
+		bar->HideWidget();
 	}
-	if (IsValid(InputBuffer)) {
-		auto EnableAction = InputBuffer->GetEnableAction();
-
-		for (int i = 0; i < EnableAction.Num(); ++i) {
-			CommandBars[i]->SetCommand(EnableAction[i], InputBuffer->GetCommandFromName(EnableAction[i]));
-		}
+	for (int i = 0; i < chain.Num();++i) {
+		CommandBars[i]->SetCommand(chain[i].AttackName, chain[i].MoveCommand,chain[i].ActionCommand);
 	}
 }
 
@@ -79,5 +82,13 @@ void UBaseWidget::TraceTarget(class ABasePlayerController* control, class ABaseM
 	FVector2D ScreenPos;
 	if (UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(control, target->GetActorLocation(), ScreenPos, false)) {
 		TargetMark->SetRenderTranslation(ScreenPos);
+	}
+}
+void UBaseWidget::UseDamageText(class ABasePlayerController* control, FVector worldlocation, int32 damage, bool IsCritical) {
+	for (auto element : DamageTextPool) {
+		if (element->GetIsEnable()) {
+			element->UseDamagetText(control, worldlocation, damage, IsCritical);
+			break;
+		}
 	}
 }

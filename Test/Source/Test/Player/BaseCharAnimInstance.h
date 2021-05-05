@@ -5,7 +5,6 @@
 #include "../Test.h"
 #include "../BaseEnum.h"
 #include "Animation/AnimInstance.h"
-#include "ActionAnimManager.h"
 #include "BaseCharAnimInstance.generated.h"
 
 /**
@@ -22,26 +21,24 @@ public:
 
 	
 private:
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character", meta = (AllowPrivateAccess = "true"))
-		bool IsDrawWeapon;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "State", meta = (AllowPrivateAccess = "true"))
+		ECharacterState CurrentState = ECharacterState::E_NONE;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "State", meta = (AllowPrivateAccess = "true"))
+		bool IsBattle;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "State", meta = (AllowPrivateAccess = "true"))
+		bool IsDead;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "State", meta = (AllowPrivateAccess = "true"))
+		bool IsDown;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement", meta = (AllowPrivateAccess = "true"))
 		float CharSpeed;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character", meta = (AllowPrivateAccess = "true"))
-		bool IsRolling;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character", meta = (AllowPrivateAccess = "true"))
-		bool IsInAir;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character", meta = (AllowPrivateAccess = "true"))
-		float PlayRate;
 
 
 	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "Evade", meta = (AllowPrivateAccess = "true"))
 		UAnimMontage* Evade;
 	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "Evade", meta = (AllowPrivateAccess = "true"))
-		UAnimMontage* Exhaust;
+		UAnimMontage* KnockBack;
 	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "Attacks", meta = (AllowPrivateAccess = "true"))
 		TArray<class UAnimMontage*> LeftAttackDualAnims;
-	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "Attacks", meta = (AllowPrivateAccess = "true"))
-		int32 ComboCount;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character", meta = (AllowPrivateAccess = "true"))
 		bool CanAttack;
 	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "Skills", meta = (AllowPrivateAccess = "true"))
@@ -49,16 +46,15 @@ private:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon", meta = (AllowPrivateAccess = "true"))
 		EWeaponType CurrentWeapon;
-	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "AnimationTable", meta = (AllowPrivateAccess = "true"))
-		UActionAnimManager* AnimTable;
 
 private:
-
+	float MakeCharSpeed(APawn* pawn);
 public:
 	void ExchangeWeapon(EWeaponType type);
 	void PlayAnimMontage(UAnimMontage* montage);
 	void PlayEvade();
-	void PlayExhaust();
-	UActionAnimManager* GetAnimManager() { return AnimTable; }
+	void PlayKnockBack();
 
+	void CharacterChangeState(ECharacterState state);
+	void ChangeWeapon(EWeaponType type);
 };

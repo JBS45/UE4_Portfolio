@@ -1,8 +1,0 @@
-{
-	"SourceFiles": [
-		"F:\\Test\\UE4ActionGame\\Test\\Source\\Test\\Test.Build.cs",
-		"F:\\Test\\UE4ActionGame\\Test\\Source\\Test.Target.cs",
-		"F:\\Test\\UE4ActionGame\\Test\\Source\\TestEditor.Target.cs"
-	],
-	"EngineVersion": "4.25.4"
-}

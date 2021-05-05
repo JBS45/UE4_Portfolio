@@ -5,12 +5,17 @@
 #include "../Components/MyPlayerCameraManager.h"
 #include "../Monster/BaseMonster.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "../Components/DamageInterface.h"
+#include "../Input/InputBufferManager.h"
+#include "../Input/CommandTableManager.h"
 
 
 ABasePlayerController::ABasePlayerController() {
 	PlayerCameraManagerClass = AMyPlayerCameraManager::StaticClass();
 
 	InputBuffer = CreateDefaultSubobject<UInputBufferManager>(TEXT("InputBuffer"));
+	CommandTable = CreateDefaultSubobject<UComandTableManager>(TEXT("CommandTable"));
+
 	IsLockOn = false;
 
 	CurrentWeapon = EWeaponType::E_NOWEAPON;
@@ -23,7 +28,6 @@ void ABasePlayerController::SetupInputComponent(){
 	InputComponent->BindAxis(TEXT("LeftRight"), this, &ABasePlayerController::MoveRight);
 	InputComponent->BindAxis(TEXT("LookUP"), this, &ABasePlayerController::CameraLookUp);
 	InputComponent->BindAxis(TEXT("Turn"), this, &ABasePlayerController::CameraTurn);
-	InputComponent->BindAxis(TEXT("Wheel"), this, &ABasePlayerController::CameraZoom);
 
 	InputComponent->BindAction(TEXT("LockOn"), EInputEvent::IE_Pressed, this, &ABasePlayerController::ToggleLockOn);
 	InputComponent->BindAction(TEXT("LockChnage"), EInputEvent::IE_Pressed, this, &ABasePlayerController::ChangeLockOnTarget);
@@ -36,23 +40,21 @@ void ABasePlayerController::SetupInputComponent(){
 	InputComponent->BindAction(TEXT("MouseLeftClick"), EInputEvent::IE_Pressed, this, &ABasePlayerController::MouseLeftClick);
 	InputComponent->BindAction(TEXT("MouseRightClick"), EInputEvent::IE_Pressed, this, &ABasePlayerController::MouseRightClick);
 
+	InputComponent->BindAction(TEXT("W"), EInputEvent::IE_Pressed, this, &ABasePlayerController::PressW);
+	InputComponent->BindAction(TEXT("W"), EInputEvent::IE_Released, this, &ABasePlayerController::ReleaseW);
+	InputComponent->BindAction(TEXT("S"), EInputEvent::IE_Pressed, this, &ABasePlayerController::PressS);
+	InputComponent->BindAction(TEXT("S"), EInputEvent::IE_Released, this, &ABasePlayerController::ReleaseS);
+	InputComponent->BindAction(TEXT("D"), EInputEvent::IE_Pressed, this, &ABasePlayerController::PressD);
+	InputComponent->BindAction(TEXT("D"), EInputEvent::IE_Released, this, &ABasePlayerController::ReleaseD);
+	InputComponent->BindAction(TEXT("A"), EInputEvent::IE_Pressed, this, &ABasePlayerController::PressA);
+	InputComponent->BindAction(TEXT("A"), EInputEvent::IE_Released, this, &ABasePlayerController::ReleaseA);
 
-	InputComponent->BindAction(TEXT("TEST"), EInputEvent::IE_Pressed, this, &ABasePlayerController::TestKey);
 }
 
 void ABasePlayerController::BeginPlay() {
 	Super::BeginPlay();
 
 	TESTLOG(Warning, TEXT("player control begin play"));
-
-	if (AssistantType == nullptr) {
-		AssistantType = ABaseAssistant::StaticClass();
-	}
-
-	FVector location = CurrentCharaceter->GetActorLocation() - (CurrentCharaceter->GetActorForwardVector() * 100);
-	FRotator rotator = FRotator::ZeroRotator;
-	Assistant = GetWorld()->SpawnActor<ABaseAssistant>(AssistantType, location, rotator);
-	Assistant->SetMaster(CurrentCharaceter);
 }
 
 void ABasePlayerController::OnPossess(APawn* pawn) {
@@ -63,45 +65,111 @@ void ABasePlayerController::OnPossess(APawn* pawn) {
 	CurrentCharaceter = Cast<ABaseCharacter>(this->GetPawn());
 	CurrentCharaceter->SetInitWeapon();
 
-	InputBuffer->EvadeDelegate.BindUObject(CurrentCharaceter, &ABaseCharacter::Evade);
-	ChangeWeapon(EWeaponType::E_DUAL);
-	ChangeCharacterState(ECharacterState::E_IDLE);
+	ChangeStateDel.AddUObject(this, &ABasePlayerController::ChangeCharacterState);
+	ChangeStateDel.AddUObject(CurrentCharaceter, &ABaseCharacter::CharacterChangeState);
+	ChangeStateDel.AddUObject(InputBuffer, &UInputBufferManager::ChangeCharacterState);
+
+	ChangeWeaponDel.AddUObject(this, &ABasePlayerController::ChangeWeapon);
+	ChangeWeaponDel.AddUObject(CurrentCharaceter, &ABaseCharacter::ChangeWeapon);
+	ChangeWeaponDel.AddUObject(CommandTable, &UComandTableManager::ChangeCommandTable);
+	ChangeWeaponDel.AddUObject(InputBuffer, &UInputBufferManager::ChangeWeapon);
+
+	InputBuffer->SetCommandTable(CommandTable);
+
+	CurrentCharaceter->GetCharacterStatus()->OnCharacterDeadDel.BindUObject(this, &ABasePlayerController::OnDead);
+	CurrentCharaceter->GetCharacterStatus()->OnStaminaZeroDel.BindUObject(this, &ABasePlayerController::NoStatmina);
+
+	SprintDel.AddUObject(CurrentCharaceter, &ABaseCharacter::SetIsSprint);
+	SprintDel.AddUObject(CurrentCharaceter->GetCharacterStatus(), &UCharacterStatusManager::SetIsSprint);
+
 
 	AttachWidgetToViewport(HUDWidgetClass);
-	PlayerHUD->BindCharacterStatus(CurrentCharaceter->GetCharacterStatus());
-	PlayerHUD->BindInputCommand(InputBuffer);
 
+	PlayerHUD->BindCharacterStatus(CurrentCharaceter->GetCharacterStatus());
+
+	CommandTable->NewActionChainDel.BindUObject(PlayerHUD, &UBaseWidget::UpdateCommand);
+	CurrentCharaceter->AttackDel.BindUObject(PlayerHUD, &UBaseWidget::UseDamageText);
 }
 
 
 void ABasePlayerController::MoveForward(float Value)
 {
+	if (!CanMove) return;
 
-	if (CurrentCharaceter)
-	{
-		CurrentCharaceter->MoveForward(Value);
-		if (Value > 0.0f) {
-			AddInputBuffer(EInputKey::E_FORWARD);
-		}
-		else if (Value < 0.0f) {
-			AddInputBuffer(EInputKey::E_BACKWARD);
-		}
+	CurrentCharaceter->MoveForward(Value);
+	if (Value > 0.0f) {
+		PressW();
+	}
+	else if (Value < 0.0f) {
+		PressS();
 	}
 }
 void ABasePlayerController::MoveRight(float Value)
 {
+	if (!CanMove) return;
 
 	if (CurrentCharaceter)
 	{
 		CurrentCharaceter->MoveRight(Value);
 		if (Value > 0.0f) {
-			AddInputBuffer(EInputKey::E_RIGHT);
+			PressD();
 		}
 		else if (Value < 0.0f) {
-			AddInputBuffer(EInputKey::E_LEFT);
+			PressA();
 		}
 	}
 }
+
+void ABasePlayerController::PressW()
+{
+	FMoveInputInfo input;
+	input.InputType = EMoveKey::E_FORWARD;
+	input.TimeStamp = GetWorld()->TimeSeconds;
+	InputBuffer -> AddInputToInputBuffer(input);
+	InputBuffer->SetPressedW(true);
+}
+void ABasePlayerController::ReleaseW()
+{
+	InputBuffer->SetPressedW(false);
+}
+void ABasePlayerController::PressS()
+{
+	FMoveInputInfo input;
+	input.InputType = EMoveKey::E_BACKWARD;
+	input.TimeStamp = GetWorld()->TimeSeconds;
+	InputBuffer->AddInputToInputBuffer(input);
+	InputBuffer->SetPressedS(true);
+}
+void ABasePlayerController::ReleaseS() 
+{
+	InputBuffer->SetPressedS(false);
+}
+void ABasePlayerController::PressD()
+{
+	FMoveInputInfo input;
+	input.InputType = EMoveKey::E_RIGHT;
+	input.TimeStamp = GetWorld()->TimeSeconds;
+	InputBuffer->AddInputToInputBuffer(input);
+	InputBuffer->SetPressedD(true);
+}
+void ABasePlayerController::ReleaseD()
+{
+	InputBuffer->SetPressedD(false);
+}
+void ABasePlayerController::PressA()
+{
+	FMoveInputInfo input;
+	input.InputType = EMoveKey::E_LEFT;
+	input.TimeStamp = GetWorld()->TimeSeconds;
+	InputBuffer->AddInputToInputBuffer(input);
+	InputBuffer->SetPressedA(true);
+}
+void ABasePlayerController::ReleaseA()
+{
+	InputBuffer->SetPressedA(false);
+}
+
+
 void ABasePlayerController::CameraLookUp(float Value) {
 
 	if (CurrentCharaceter)
@@ -116,49 +184,74 @@ void ABasePlayerController::CameraTurn(float Value) {
 		CurrentCharaceter->CameraTurn(Value);
 	}
 }
-void ABasePlayerController::CameraZoom(float Value) {
+/*void ABasePlayerController::CameraZoom(float Value) {
 
 	if (CurrentCharaceter)
 	{
 		CurrentCharaceter->CameraZoom(Value);
 	}
-}
+}*/
 void ABasePlayerController::PressShift() {
 
-	switch (CharacterState) {
-	case ECharacterState::E_IDLE:
-	case ECharacterState::E_BATTLE:
-		InputBuffer->PutUpWeapon();
-		ChangeCharacterState(ECharacterState::E_SPRINT);
-		break;
-	case ECharacterState::E_EXHAUST:
-		break;
-	}
+	IsSprint = true;
+	SprintDel.Broadcast(IsSprint);
+
+	InputBuffer->PutUpWeapon();
 }
 void ABasePlayerController::ReleaseShift() {
 
-	switch (CharacterState) {
-	case ECharacterState::E_SPRINT:
-	case ECharacterState::E_BATTLE:
-		ChangeCharacterState(ECharacterState::E_IDLE);
-		break;
-	}
+	IsSprint = false;
+	SprintDel.Broadcast(IsSprint);
 }
 
 void ABasePlayerController::MouseLeftClick() {
-	AddInputBuffer(EInputKey::E_LEFTCLICK);
+	//AddInputBuffer(EInputKey::E_LEFTCLICK);
+	FActionInputInfo input;
+	input.InputType = EActionKey::E_LEFTCLICK;
+	input.TimeStamp = GetWorld()->TimeSeconds;
+	InputBuffer->AddInputToInputBuffer(input);
 }
 void ABasePlayerController::MouseRightClick() {
-	AddInputBuffer(EInputKey::E_RIGHTCLICK);
+	//AddInputBuffer(EInputKey::E_RIGHTCLICK);
+	FActionInputInfo input;
+	input.InputType = EActionKey::E_RIGHTCLICK;
+	input.TimeStamp = GetWorld()->TimeSeconds;
+	InputBuffer->AddInputToInputBuffer(input);
 }
 void ABasePlayerController::SpaceKey() {
-	AddInputBuffer(EInputKey::E_EVADE);
+	//AddInputBuffer(EInputKey::E_EVADE);
+	FActionInputInfo input;
+	input.InputType = EActionKey::E_EVADE;
+	input.TimeStamp = GetWorld()->TimeSeconds;
+	InputBuffer->AddInputToInputBuffer(input);
 }
 
-void ABasePlayerController::TestKey() {
-
+void ABasePlayerController::ChangeCharacterState(ECharacterState state) {
+	if (CharacterState == state) return;
+	CharacterState = state;
+	switch (CharacterState) {
+	case ECharacterState::E_IDLE:
+		CanMove = true;
+		break;
+	case ECharacterState::E_BATTLE:
+		CanMove = true;
+		break;
+	case ECharacterState::E_HIT:
+		CanMove = false;
+		break;
+	case ECharacterState::E_DOWN:
+		CanMove = false;
+		break;
+	case ECharacterState::E_DEAD:
+		CanMove = false;
+		break;
+	}
 }
-
+void ABasePlayerController::ChangeWeapon(EWeaponType type) {
+	if (CurrentWeapon == type)return;
+	CurrentWeapon = type;
+	
+}
 void ABasePlayerController::ToggleLockOn()
 {
 	if (IsLockOn) {
@@ -167,16 +260,13 @@ void ABasePlayerController::ToggleLockOn()
 	}
 	else {
 		auto Array = CurrentCharaceter->GetTargetMonster();
-		TESTLOG(Warning, TEXT("%d"), Array.Num());
 		if (Array.Num() > 0) {
 			if (Target == nullptr) {
 				Target = Cast<ABaseMonster>(Array[0]);
-				Assistant->SetTarget(Target);
 			}
 			else {
 				if (!Array.Contains(Target)) {
 					Target = Cast<ABaseMonster>(Array[0]);
-					Assistant->SetTarget(Target);
 				}
 			}
 		}
@@ -201,80 +291,11 @@ void ABasePlayerController::ChangeLockOnTarget()
 					iter = 0;
 				}
 				Target = Cast<ABaseMonster>(Array[iter]);
-				Assistant->SetTarget(Target);
 			}
 		}
 	}
 	//Todo : Next Target from iterator;
 }
-
-void ABasePlayerController::AddInputBuffer(EInputKey key)
-{
-	FInputInfo TempInputInfo;
-
-	TempInputInfo.InputType = key;
-	TempInputInfo.TimeStamp = GetWorld()->GetTimeSeconds();
-	InputBuffer->AddInputToInputBuffer(TempInputInfo);
-
-
-}
-
-void ABasePlayerController::ChangeCharacterState(ECharacterState state) {
-	if (CharacterState == state) return;
-	CharacterState = state;
-	switch (CharacterState) {
-	case ECharacterState::E_IDLE:
-		InputBuffer->SetCharacterState(CharacterState);
-		CurrentCharaceter->SetMovement(EMovementState::E_IDLE);
-		CurrentCharaceter->SetIsDrawWeapon(false);
-		break;
-	case ECharacterState::E_EXHAUST:
-		InputBuffer->SetCharacterState(CharacterState);
-		CurrentCharaceter->SetMovement(EMovementState::E_EXHAUST);
-		CurrentCharaceter->SetIsDrawWeapon(false);
-		CurrentCharaceter->GetAnimInst()->PlayExhaust();
-		break;
-	case ECharacterState::E_SPRINT:
-		InputBuffer->SetCharacterState(CharacterState);
-		CurrentCharaceter->SetMovement(EMovementState::E_SPRINT);
-		CurrentCharaceter->SetIsDrawWeapon(false);
-		break;
-	case ECharacterState::E_BATTLE:
-		InputBuffer->SetCharacterState(CharacterState);
-		CurrentCharaceter->SetMovement(EMovementState::E_IDLE);
-		CurrentCharaceter->SetIsDrawWeapon(true);
-		Assistant->SetIsBattle(true);
-		break;
-	case ECharacterState::E_ATTACKING:
-		break;
-	case ECharacterState::E_EVADE:
-		break;
-	case ECharacterState::E_HIT:
-		break;
-	case ECharacterState::E_KNOCKBACK:
-		InputBuffer->SetCharacterState(CharacterState);
-		CurrentCharaceter->SetIsDrawWeapon(false);
-		break;
-	case ECharacterState::E_DOWN:
-		InputBuffer->SetCharacterState(CharacterState);
-		CurrentCharaceter->SetIsDrawWeapon(false);
-		break;
-	case ECharacterState::E_DEAD:
-		InputBuffer->SetCharacterState(CharacterState);
-		CurrentCharaceter->SetIsDrawWeapon(false);
-		break;
-	}
-}
-void ABasePlayerController::ChangeWeapon(EWeaponType type) {
-	if (CurrentWeapon == type)return;
-	CurrentWeapon = type;
-	if (CurrentCharaceter)
-	{
-		CurrentCharaceter->ChangeWeapon(CurrentWeapon);
-		InputBuffer->ChangeCommandDT(CurrentWeapon);
-	}
-}
-
 void ABasePlayerController::AttachWidgetToViewport(TSubclassOf<class UBaseWidget> widget) {
 	if (widget != nullptr) {
 		PlayerHUD = CreateWidget<UBaseWidget>(this, widget);
@@ -304,4 +325,15 @@ void ABasePlayerController::CameraLockOn(float deltaTime) {
 }
 ABaseMonster* ABasePlayerController::GetTarget() { 
 	return Target;
+}
+
+void ABasePlayerController::OnDead() {
+	ChangeStateDel.Broadcast(ECharacterState::E_DEAD);
+}
+void ABasePlayerController::NoStatmina() {
+	IsSprint = false;
+	SprintDel.Broadcast(false);
+}
+UInputBufferManager* ABasePlayerController::GetInputBuffer() {
+	return InputBuffer;
 }

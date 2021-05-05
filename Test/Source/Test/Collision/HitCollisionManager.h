@@ -8,6 +8,7 @@
 #include "Components/ActorComponent.h"
 #include "HitCollisionManager.generated.h"
 
+class USkeletalMeshComponent;
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent), abstract )
 class TEST_API UHitCollisionManager : public UActorComponent
@@ -19,43 +20,40 @@ public:
 	UHitCollisionManager();
 
 protected:
-	/*
-	UPROPERTY(VisibleAnywhere,  Category = "Collison", meta = (AllowPrivateAccess = "true"))
-		UBoxComponent* Head;
-	UPROPERTY(VisibleAnywhere,  Category = "Collison", meta = (AllowPrivateAccess = "true"))
-		UBoxComponent* Body;
-	UPROPERTY(VisibleAnywhere,  Category = "Collison", meta = (AllowPrivateAccess = "true"))
-		UBoxComponent* LeftUpperArm;
-	UPROPERTY(VisibleAnywhere,  Category = "Collison", meta = (AllowPrivateAccess = "true"))
-		UBoxComponent* LeftArm;
-	UPROPERTY(VisibleAnywhere,  Category = "Collison", meta = (AllowPrivateAccess = "true"))
-		UBoxComponent* RightUpperArm;
-	UPROPERTY(VisibleAnywhere,  Category = "Collison", meta = (AllowPrivateAccess = "true"))
-		UBoxComponent* RightArm;
-	UPROPERTY(VisibleAnywhere,  Category = "Collison", meta = (AllowPrivateAccess = "true"))
-		UBoxComponent* LeftUpperLeg;
-	UPROPERTY(VisibleAnywhere,  Category = "Collison", meta = (AllowPrivateAccess = "true"))
-		UBoxComponent* LeftLeg;
-	UPROPERTY(VisibleAnywhere,  Category = "Collison", meta = (AllowPrivateAccess = "true"))
-		UBoxComponent* RightUpperLeg;
-	UPROPERTY(VisibleAnywhere,  Category = "Collison", meta = (AllowPrivateAccess = "true"))
-		UBoxComponent* RightLeg;
-		*/
-	TMap<FString,FHitBoxInfo> HitBoxInfo;
-	TMap<FString,UBoxComponent*> AllHitBox;
+	TMap<EMonsterPartsType, UHitCollisionPart*> HitBox;
 	TArray<FString> HitBoxKey;
+	UDataTable* DataTable;
 protected:
 	// Called when the game starts
 	virtual void BeginPlay() override;
 
-public:	
-	// Called every frame
-	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
-	virtual void CreateHitBox(FString socketName) PURE_VIRTUAL(UHitCollisionManager::CreateHitBox);
-	virtual void SetUpAttachSocket(class USkeletalMeshComponent* mesh) PURE_VIRTUAL(UHitCollisionManager::SetUpAttachSocket);
-	virtual void SetUpHitBoxInfo(FVector size, FVector pos, FString socketName) PURE_VIRTUAL(UHitCollisionManager::SetUpHitBoxInfo);
-	virtual void SetUpCollisionType(FName name, ECollisionChannel channel) PURE_VIRTUAL(UHitCollisionManager::SetUpCollisionType);
-	
+public:		
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction * ThisTickFunction) override;
 	//virtual Hit Check
+	virtual void InitHitBox(UDataTable* data,USkeletalMeshComponent* mesh);
+	virtual bool ReceiveDamage(const FHitResult& hit, const FName socketName, float dmg, int32& OutDamage, bool& weak);
+	FORCEINLINE TMap<EMonsterPartsType, UHitCollisionPart*> GetHitBox();
+protected:
+	void SearchChild(USkeletalMeshComponent* mesh, FName CurrentBone, TArray<FName>& Part, TArray<FName>& Bones);
+};
+UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 
+class TEST_API UHitCollisionPart : public UObject {
+	GENERATED_BODY()
+public:
+	UHitCollisionPart();
+private:
+	EMonsterPartsType Part;
+	bool CanDestroy;
+	bool IsDestroy;
+	bool IsWeak;
+	float TotalDamage;
+	float DestroyDamage;
+	float Defence;
+	TArray<FName> Bones;
+
+public:
+	void SetUpData(const FMonsterParts data, TArray<FName> PartBone);
+	bool CheckGetDamageThisPart(const FHitResult& hit,const FName socketName, float dmg, int32& OutDamage, bool& broken, EMonsterPartsType& part, bool& weak);
+	FORCEINLINE TArray<FName> GetBones();
 };

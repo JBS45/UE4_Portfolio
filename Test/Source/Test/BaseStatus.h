@@ -8,6 +8,9 @@
 #include "BaseEnum.h"
 #include "BaseStatus.generated.h"
 
+const static FName PlayerTag(TEXT("Player"));
+const static FName MonsterTag(TEXT("Monster"));
+
 
 USTRUCT(BlueprintType)
 struct TEST_API FBaseStatus
@@ -116,7 +119,17 @@ public:
 	bool IsReady = true;
 	float CurrentLeftTime =0.0f;
 };
-
+USTRUCT(BlueprintType)
+struct TEST_API FMonsterAI : public FTableRowBase {
+	GENERATED_USTRUCT_BODY()
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		EMonsterState State;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		class UBehaviorTree* BehaviorTree;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		class UBlackboardData* BlackBoard;
+};
 USTRUCT(BlueprintType)
 struct TEST_API FMonsterAIData : public FTableRowBase {
 	GENERATED_USTRUCT_BODY()
@@ -124,7 +137,107 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		TSubclassOf<class ABaseMonster> MonsterType;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FString BBRef;
+		TArray<FMonsterAI> MonsterAI;
+};
+
+USTRUCT(BlueprintType)
+struct TEST_API FMonsterParts : public FTableRowBase {
+	GENERATED_USTRUCT_BODY()
+public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FString BTRef;
+		EMonsterPartsType Part;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		bool CanDestory;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		bool IsWeak;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		float DestroyDamage;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		float Defence;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		FName PartRootBoneName;
+};
+
+USTRUCT(BlueprintType)
+struct TEST_API FMonsterStatus : public FTableRowBase {
+	GENERATED_USTRUCT_BODY()
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		uint8 MonsterID;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		FString MonsterName;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		float Damage;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		float HP;
+	//TArray<unit8> ItemIDs Reward Item Array
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString PartsDataRef;
+};
+USTRUCT(BlueprintType)
+struct TEST_API FMonsterAnim : public FTableRowBase {
+	GENERATED_USTRUCT_BODY()
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		FString Name;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		UAnimMontage* Animation;
+};
+
+
+USTRUCT(BlueprintType)
+struct FTotalCommandDataTable : public FTableRowBase {
+	GENERATED_USTRUCT_BODY()
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		EWeaponType weapon;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		class UDataTable* CommandTable;
+};
+
+USTRUCT(BlueprintType)
+struct FMoveInputInfo {
+	GENERATED_USTRUCT_BODY()
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
+		EMoveKey InputType;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
+		float  TimeStamp;
+};
+USTRUCT(BlueprintType)
+struct FActionInputInfo {
+	GENERATED_USTRUCT_BODY()
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
+		EActionKey InputType;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
+		float  TimeStamp;
+};
+
+USTRUCT(BlueprintType)
+struct FChainAction {
+	GENERATED_USTRUCT_BODY()
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		FString AttackName;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		ECommnadPriority Priority;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		TArray<EMoveKey> MoveCommand;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		TArray<EActionKey> ActionCommand;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		UAnimMontage* ActionMontage;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		TArray<FString> EnableChainAction;
+};
+USTRUCT(BlueprintType)
+struct FChainActionTable : public FTableRowBase
+{
+	GENERATED_USTRUCT_BODY()
+
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		FChainAction Action;
+
 };

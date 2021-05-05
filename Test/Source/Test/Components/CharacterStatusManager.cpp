@@ -26,6 +26,12 @@ void UCharacterStatusManager::TickComponent(float DeltaTime, ELevelTick TickType
 	if (IsAlive) {
 		ReGen(DeltaTime);
 	}
+	if (IsSprint) {
+		SprintUseStamina(DeltaTime);
+	}
+	else {
+		RegenStamina(DeltaTime);
+	}
 
 }
 void UCharacterStatusManager::StatusInit() {
@@ -95,24 +101,6 @@ void UCharacterStatusManager::ReGen(const float deltaTime) {
 	else {
 		CharacterStatus.CurrentHp = CharacterStatus.MaxHp;
 	}
-	if (IsSprint) {
-		if (CharacterStatus.CurrentStamina > 0) {
-			CharacterStatus.CurrentStamina -= CharacterStatus.StaminaConsumeSprint* (deltaTime / ReGenBaseTime);
-		}
-		else {
-			CharacterStatus.CurrentStamina = 0;
-			IsSprint = false;
-			OnChangeCharacterState.ExecuteIfBound(ECharacterState::E_EXHAUST);
-		}
-	}
-	else {
-		if (CharacterStatus.CurrentStamina < CharacterStatus.MaxStamina) {
-			CharacterStatus.CurrentStamina += CharacterStatus.StaminaRegen*(deltaTime / ReGenBaseTime);
-		}
-		else {
-			CharacterStatus.CurrentStamina = CharacterStatus.MaxStamina;
-		}
-	}
 	OnStatusUpdate.ExecuteIfBound();
 }
 bool UCharacterStatusManager::UseStamina() {
@@ -125,12 +113,65 @@ bool UCharacterStatusManager::UseStamina() {
 	return false;
 }
 
+
+float UCharacterStatusManager::GetHpRate() {
+	return CharacterStatus.CurrentHp / CharacterStatus.MaxHp; 
+}
+float UCharacterStatusManager::GetStaminaRate() {
+	return CharacterStatus.CurrentStamina / CharacterStatus.MaxStamina; 
+}
+float UCharacterStatusManager::GetDamage() {
+	return CharacterStatus.Dmg; 
+}
+float UCharacterStatusManager::GetCritical() {
+	return CharacterStatus.CriticalRate; 
+}
+void UCharacterStatusManager::SetIsSprint(bool value) {
+	IsSprint = value; 
+}
+int32 UCharacterStatusManager::TakeDamage(float Damage) {
+	int32 FinalDamage = 0;
+	if (CharacterStatus.Def <= 0) {
+		FinalDamage = FMath::FloorToInt(Damage);
+	}
+	else {
+		float DefRate = CharacterStatus.Def / (CharacterStatus.Def + 100);
+		FinalDamage = FMath::FloorToInt(Damage*DefRate);
+	}
+	CharacterStatus.CurrentHp -= FinalDamage;
+
+	if (CharacterStatus.CurrentHp <= 0) {
+		OnCharacterDeadDel.Execute();
+	}
+
+	return FinalDamage;
+}
+
+
+void UCharacterStatusManager::RegenStamina(float delta) {
+	if (CharacterStatus.CurrentStamina < CharacterStatus.MaxStamina) {
+		CharacterStatus.CurrentStamina += CharacterStatus.StaminaRegen*(delta / ReGenBaseTime);
+	}
+	else {
+		CharacterStatus.CurrentStamina = CharacterStatus.MaxStamina;
+	}
+}
+void UCharacterStatusManager::SprintUseStamina(float delta) {
+	if (CharacterStatus.CurrentStamina > 0) {
+		CharacterStatus.CurrentStamina -= CharacterStatus.StaminaConsumeSprint* (delta / ReGenBaseTime);
+	}
+	else {
+		CharacterStatus.CurrentStamina = 0;
+		OnStaminaZeroDel.Execute();
+	}
+}
+
 const FBaseStatus FBaseStatus::operator+(const FBaseStatus& rhs) {
 	return FBaseStatus(*this) += rhs;
 }
 
 FBaseStatus& FBaseStatus::operator+=(const FBaseStatus& rhs) {
-	this->Hp+= rhs.Hp;
+	this->Hp += rhs.Hp;
 	this->Stamina += rhs.Stamina;
 	this->Dmg += rhs.Dmg;
 	this->Def += rhs.Def;

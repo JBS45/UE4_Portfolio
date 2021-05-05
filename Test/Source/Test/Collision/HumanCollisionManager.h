@@ -19,10 +19,14 @@ protected:
 	virtual void BeginPlay() override;
 
 public:
-	// Called every frame
-	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
-	virtual void CreateHitBox(FString socketName) override;
-	virtual void SetUpAttachSocket(class USkeletalMeshComponent* mesh) override;
-	virtual void SetUpHitBoxInfo(FVector size, FVector pos, FString socketName) override;
-	virtual void SetUpCollisionType(FName name, ECollisionChannel channel) override;
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction * ThisTickFunction) override;
+	//new
+	virtual void InitHitBox(UDataTable* data, USkeletalMeshComponent* mesh) override;
+	virtual bool ReceiveDamage(const FHitResult& hit, const FName socketName, float dmg, int32& outDmage,bool& IsWeak) override;
+
+public:
+	void SetUpCharacterStatusManager(class ABaseCharacter* character);
+private:
+	class ABaseCharacter* Character;
+	class UCharacterStatusManager* StatusManager;
 };

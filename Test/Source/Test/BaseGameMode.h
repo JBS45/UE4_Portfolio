@@ -3,6 +3,7 @@
 #pragma once
 
 #include "Test.h"
+#include "BaseStatus.h"
 #include "GameFramework/GameMode.h"
 #include "Assistant/BaseAssistant.h"
 #include "BaseGameMode.generated.h"
@@ -24,4 +25,8 @@ private:
 	UPROPERTY(VisibleAnywhere, meta = (AllowPrivateAccess = "true"))
 		class ABasePlayerController* PlayerControl;
 
+	UPROPERTY(VisibleAnywhere, meta = (AllowPrivateAccess = "true"))
+		TMap<uint8, FMonsterStatus> MonsterData;
+public:
+	FMonsterStatus GetMonsterData(uint8 MonsterId);
 };

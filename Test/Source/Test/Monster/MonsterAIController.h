@@ -4,6 +4,7 @@
 
 #include "../Test.h"
 #include "../BaseStatus.h"
+#include "../Player/BaseCharacter.h"
 #include "AIController.h"
 #include "MonsterAIController.generated.h"
 
@@ -25,21 +26,40 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Monster", meta = (AllowPrivateAccess = "true"))
 		class ABaseMonster* CurrnetMonster;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI", meta = (AllowPrivateAccess = "true"))
-		class UBehaviorTree* BTAsset;
+		TMap<EMonsterState, FMonsterAI> AITable;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI", meta = (AllowPrivateAccess = "true"))
-		class UBlackboardData* BBAsset;
+		class UBehaviorTree* CurrentBT;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI", meta = (AllowPrivateAccess = "true"))
+		class UBlackboardData* CurrentBB;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State", meta = (AllowPrivateAccess = "true"))
+		EMonsterState CurrentState;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State", meta = (AllowPrivateAccess = "true"))
+		int32 BrokenPart;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Target", meta = (AllowPrivateAccess = "true"))
+		ABaseCharacter* Target;
+
 	UPROPERTY()
 		class UDataTable* DataRef;
-
+private:
+	bool IsFoundPlayer = false;
 public:
 	static const FName TargetDistanceKey;
 	static const FName TargetPlayerKey;
 	static const FName TargetLocationKey;
-	static const FName IsFoundPlayerKey;
+	static const FName IsAnimPlaying;
 	static const FName CurrentMonsterState;
 	static const FName PreMonsterState;
 	static const FName RandIntKey;
+	static const FName IsFlying;
 public:
 	void SetUpData(class ABaseMonster* monster);
-	void SetTarget(UObject* target);
+	void SetTarget(ABaseCharacter* target);
+	void SetBehaviorTree(EMonsterState state);
+	void ChangeMonsterState(EMonsterState state);
+	EMonsterState GetCurrentState() { return CurrentState; }
+	ABaseCharacter* GetTarget();
+	bool GetIsFoundPlayer() { return IsFoundPlayer; }
+	void SetBrokenState(EMonsterPartsType brokenPart);
+	//void SetUpPatrolPoints(TArray<class ATargetPoint*> arr);
 };

@@ -20,14 +20,14 @@ protected:
 	
 public:
 	void BindCharacterStatus(class UCharacterStatusManager* status);
-	void BindInputCommand(class UInputBufferManager* inputbuffer);
 	void UpdateStatus();
-	void UpdateCommand();
+	void UpdateCommand(TArray<FChainAction> chainAction);
 	void SetCameraLockOn(bool IsOn);
 	void TraceTarget(class ABasePlayerController* control, class ABaseMonster* target);
+	void UseDamageText(class ABasePlayerController* control, FVector worldlocation, int32 damage, bool IsCritical);
 private:
 	class UCharacterStatusManager* CurrentCharacterStatus;
-	class UInputBufferManager* InputBuffer;
+	class UCommandTableManager* CommandTable;
 
 	UPROPERTY()
 		class UUserWidget* PlayerStatusUI;
@@ -41,4 +41,10 @@ private:
 		class UProgressBar* StaminaBar;
 	UPROPERTY()
 		class UTargetUI* TargetMark;
+	UPROPERTY(EditAnywhere, meta = (AllowPrivateAccess = "true"))
+		TSubclassOf<class UDamageText> DamageText;
+	UPROPERTY(VisibleAnywhere, meta = (AllowPrivateAccess = "true"))
+		TArray<class UDamageText*> DamageTextPool;
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, meta = (AllowPrivateAccess = "true"))
+		int32 PoolLimit = 50;
 };

@@ -31,10 +31,11 @@ protected:
 	
 public:
 	void HideWidget();
-	void SetCommand(FString commandName, TArray<EInputKey> command);
+	void SetCommand(FString commandName, TArray<EMoveKey> move, TArray<EActionKey> Action);
 	
 private:
 	void LoadImage();
-	void SetImage(TArray<EInputKey> command);
-	UTexture2D* SelectImage(EInputKey key);
+	void SetImage(TArray<EMoveKey> move, TArray<EActionKey> Action);
+	UTexture2D* SelectImage(EMoveKey move);
+	UTexture2D* SelectImage(TArray<EActionKey> action);
 };

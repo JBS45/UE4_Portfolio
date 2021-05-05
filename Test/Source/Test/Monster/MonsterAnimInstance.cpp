@@ -3,6 +3,8 @@
 
 #include "MonsterAnimInstance.h"
 #include "BaseMonster.h"
+#include "MonsterAIController.h"
+#include "../Player/BaseCharacter.h"
 
 UMonsterAnimInstance::UMonsterAnimInstance() {
 
@@ -20,6 +22,13 @@ void UMonsterAnimInstance::NativeUpdateAnimation(float DeltaSeconds) {
 		CharSpeed = VelocityXY.Size();
 		auto Character = Cast<ABaseMonster>(Pawn);
 
+	}
+}
 
+void UMonsterAnimInstance::PlayAnimation(UAnimMontage* montage, float rate) {
+	if (montage == nullptr) return;
+
+	if (!Montage_IsPlaying(montage)) {
+		Montage_Play(montage, rate);
 	}
 }

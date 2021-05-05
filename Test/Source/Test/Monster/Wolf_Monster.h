@@ -27,25 +27,12 @@ public:
 
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-	virtual void SetUpMonsterStatus() override;
 
-	void SetArea(class AMonsterArea* area);
-	virtual FString GetMonsterName() override;
-	virtual class AMonsterArea* GetActiveArea() override;
-	virtual void SetActiveArea(class AMonsterArea* area) override;
-
-	virtual void SetPatrolNode(int max) override;
-	virtual void NextPatrolNode() override;
-	virtual int GetCurrentPatrolNode() override;
-	virtual bool GetIsAlive() override;
-	virtual bool GetIsFoundPlayer() override;
-	virtual void SetIsFoundPlayer(bool value) override;
-	virtual float GetAggroChangeTerm() override;
-	virtual TArray<APawn*> GetTargetList() override;
-	virtual float GetAttackRange() override;
-	virtual void SetTarget(ACharacter* target) override;
-	virtual EMonsterStateType GetMonsterState();
-	virtual void ChangeMonsterState(EMonsterStateType type) override;
+	virtual bool TakeDamageFromPlayer(const FHitResult& hit, const FName socketName, float dmg, int32& outDmage,bool& IsWeak) override;
+	virtual void ChangeMonsterState(EMonsterState state) override;
+	virtual bool MonsterInit(FMonsterStatus status) override;
+	virtual void Dead() override;
+public:
 
 	void NotifyArea(ACharacter* target);
 private:

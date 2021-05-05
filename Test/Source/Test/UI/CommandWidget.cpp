@@ -9,9 +9,10 @@ UCommandWidget::UCommandWidget(const FObjectInitializer& objectInitializer) : Su
 }
 void UCommandWidget::NativeConstruct() {
 	Super::NativeConstruct();
-	CommandImages.Add(Cast<UImage>(GetWidgetFromName("Command1")));
+	CommandImages.Add(Cast<UImage>(GetWidgetFromName("Move1")));
+	CommandImages.Add(Cast<UImage>(GetWidgetFromName("Move2")));
 	CommandImages.Add(Cast<UImage>(GetWidgetFromName("Plus")));
-	CommandImages.Add(Cast<UImage>(GetWidgetFromName("Command2")));
+	CommandImages.Add(Cast<UImage>(GetWidgetFromName("Action")));
 	CommandName = Cast<UTextBlock>(GetWidgetFromName("CommandName"));
 
 
@@ -24,11 +25,11 @@ void UCommandWidget :: HideWidget() {
 	CommandName->SetVisibility(ESlateVisibility::Hidden);
 
 }
-void UCommandWidget :: SetCommand(FString commandName, TArray<EInputKey> command) {
+void UCommandWidget :: SetCommand(FString commandName, TArray<EMoveKey> move, TArray<EActionKey> Action) {
 	CommandName->SetVisibility(ESlateVisibility::Visible);
 	CommandName->SetText(FText::FromString(commandName));
 
-	SetImage(command);
+	SetImage(move, Action);
 }
 
 void UCommandWidget::LoadImage() {
@@ -75,52 +76,69 @@ void UCommandWidget::LoadImage() {
 	{
 		PlusImage = PLUS.Object;
 	}
+
+	static ConstructorHelpers::FObjectFinder<UTexture2D> RLMB(TEXT("Texture2D'/Game/UI/CharaterStatus/CommandBar/LMB_RMB.LMB_RMB'"));
+	if (PLUS.Succeeded())
+	{
+		ImageArray.Add(RLMB.Object);
+	}
 	
 }
-void UCommandWidget::SetImage(TArray<EInputKey> command) {
-	if (command.Num() == 1) {
-		CommandImages[0]->SetVisibility(ESlateVisibility::Visible);
+void UCommandWidget::SetImage(TArray<EMoveKey> move, TArray<EActionKey> Action) {
+	CommandImages[3]->SetVisibility(ESlateVisibility::Visible);
+	CommandImages[3]->Brush.SetResourceObject(SelectImage(Action));
+	if(move.Num()>0) {
 
-		
-		CommandImages[0]->Brush.SetResourceObject(SelectImage(command[0]));
-	}
-	else if (command.Num() == 2) {
-		for (auto image : CommandImages) {
-			image->SetVisibility(ESlateVisibility::Visible);
-			CommandImages[0]->Brush.SetResourceObject(SelectImage(command[0]));
-			if (CommandImages[1]->Brush.GetResourceObject()==nullptr) {
-				CommandImages[1]->Brush.SetResourceObject(PlusImage);
-			}
-			CommandImages[2]->Brush.SetResourceObject(SelectImage(command[1]));
+		for (int i = 0; i < move.Num(); ++i) {
+			CommandImages[i]->SetVisibility(ESlateVisibility::Visible);
+			CommandImages[i]->Brush.SetResourceObject(SelectImage(move[i]));
 		}
+
+		CommandImages[2]->SetVisibility(ESlateVisibility::Visible);
+		CommandImages[2]->Brush.SetResourceObject(PlusImage);
 	}
 }
-UTexture2D* UCommandWidget::SelectImage(EInputKey key) {
+UTexture2D* UCommandWidget::SelectImage(EMoveKey move) {
 	UTexture2D* Result = nullptr;
 
-	switch (key) {
-	case EInputKey::E_LEFTCLICK:
-		Result = ImageArray[0];
-		break;
-	case EInputKey::E_RIGHTCLICK:
-		Result = ImageArray[1];
-		break;
-	case EInputKey::E_FORWARD:
-		Result = ImageArray[2];
-		break;
-	case EInputKey::E_BACKWARD:
-		Result = ImageArray[3];
-		break;
-	case EInputKey::E_LEFT:
-		Result = ImageArray[4];
-		break;
-	case EInputKey::E_RIGHT:
-		Result = ImageArray[5];
-		break;
-	case EInputKey::E_EVADE:
-		Result = ImageArray[6];
-		break;
+	switch (move) {
+		case EMoveKey::E_ALLMOVE:
+		case EMoveKey::E_FORWARD:
+			Result=ImageArray[2];
+			break;
+		case EMoveKey::E_BACKWARD:
+			Result=ImageArray[3];
+			break;
+		case EMoveKey::E_LEFT:
+			Result=ImageArray[4];
+			break;
+		case EMoveKey::E_RIGHT:
+			Result=ImageArray[5];
+			break;
 	}
+	
+	return Result;
+}
+UTexture2D* UCommandWidget::SelectImage(TArray<EActionKey> action) {
+	UTexture2D* Result = nullptr;
 
+	if (action.Num() > 1) {
+		Result = ImageArray[7];
+	}
+	else {
+		for (auto element : action) {
+			switch (element) {
+			case EActionKey::E_LEFTCLICK:
+				Result = ImageArray[0];
+				break;
+			case EActionKey::E_RIGHTCLICK:
+				Result = ImageArray[1];
+				break;
+			case EActionKey::E_EVADE:
+				Result = ImageArray[6];
+				break;
+			}
+		}
+	}
 	return Result;
 }

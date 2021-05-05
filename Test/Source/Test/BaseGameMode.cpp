@@ -10,11 +10,19 @@ ABaseGameMode::ABaseGameMode() {
 	
 	DefaultPawnClass = ABaseCharacter::StaticClass();
 	PlayerControllerClass = ABasePlayerController::StaticClass();
-	
+
 }
 
 void ABaseGameMode::PostLogin(APlayerController * NewPlayer)
 {
+	auto DataTable = LoadObject<UDataTable>(NULL,TEXT("DataTable'/Game/DataTable/Monster/MonsterStatTable.MonsterStatTable'"),NULL, LOAD_None,NULL);
+
+	auto Names = DataTable->GetRowNames();
+	for (auto name : Names) {
+		auto row = DataTable->FindRow<FMonsterStatus>(name, FString(TEXT("Init Monster data")));
+		MonsterData.Add(row->MonsterID, *row);
+	}
+	
 	TESTLOG(Warning, TEXT("PostLogin Begin"));
 	Super::PostLogin(NewPlayer);
 	PlayerControl = Cast<ABasePlayerController>(NewPlayer);
@@ -27,5 +35,7 @@ void ABaseGameMode::BeginPlay() {
 	TESTLOG(Warning, TEXT("Game mode begin play"));
 }
 
-
+FMonsterStatus ABaseGameMode::GetMonsterData(uint8 MonsterId) {
+	return MonsterData[MonsterId];
+}
 

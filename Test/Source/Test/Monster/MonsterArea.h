@@ -3,6 +3,7 @@
 #pragma once
 
 #include "../Test.h"
+#include "../BaseStatus.h"
 #include "GameFramework/Actor.h"
 #include "Components/SphereComponent.h"
 #include "BaseMonster.h"
@@ -34,10 +35,15 @@ private:
 private:
 
 	//Todo : Make MonsterSpawner;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Area", meta = (AllowPrivateAccess = "true"))
+		USphereComponent* Area;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Area", meta = (AllowPrivateAccess = "true"))
+		float AreaRange;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster", meta = (AllowPrivateAccess = "true"))
 		AMonsterSpawner* Spawner;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster", meta = (AllowPrivateAccess = "true"))
 		TSubclassOf<ABaseMonster> SpawnMonsterType;
+		FMonsterStatus  SpawnMonsterStatus;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster",meta = (AllowPrivateAccess = "true"))
 		float MaxMonsterCount;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Monster", meta = (AllowPrivateAccess = "true"))
@@ -55,11 +61,6 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI", meta = (AllowPrivateAccess = "true"))
 		TArray<ATargetPoint*> PatrolPoint;
 
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detect", meta = (AllowPrivateAccess = "true"))
-		USphereComponent* DetectSphere;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detect", meta = (AllowPrivateAccess = "true"))
-		float DetectRange;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Detect", meta = (AllowPrivateAccess = "true"))
 		bool IsPlayerInRange = false;
 
@@ -68,10 +69,9 @@ private:
 	void Spawn();
 	void Reset();
 public:
-	float GetDetectRange() { return DetectRange; }
-	bool GetIsPlayerInRange() { return IsPlayerInRange; }
-	TArray<ATargetPoint*> GetPatrolPoint() { return PatrolPoint; }
+	float GetAreaRange();
+	bool GetIsPlayerInRange();
+	TArray<ATargetPoint*> GetPatrolPoint();
+	TArray<ABaseMonster*> GetMonsters();
 	void Notify(ACharacter* target);
-	TArray<ABaseMonster*> GetMonsters() { return Monsters; }
-
 };

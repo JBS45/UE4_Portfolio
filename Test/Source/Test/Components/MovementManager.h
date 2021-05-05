@@ -24,8 +24,8 @@ protected:
 public:
 	FVoidDelegateBool SetIsSprintForStat;
 private:
-	const float BasicSpeed = 600.0f;
-	const float RunSpeed = 1200.0f;
+	const float BasicSpeed = 800.0f;
+	const float RunSpeed = 1600.0f;
 	const float ExhuastSpeed = 200.0f;
 	float SpeedRate = 1.0f;
 
