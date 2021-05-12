@@ -11,6 +11,7 @@
 UBTTask_TurnForMonster::UBTTask_TurnForMonster() {
 	NodeName = TEXT("Turn");
 	bNotifyTick = true;
+	LerpSpped = 20.0f;
 }
 
 EBTNodeResult::Type UBTTask_TurnForMonster::ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory) {
@@ -25,22 +26,11 @@ EBTNodeResult::Type UBTTask_TurnForMonster::ExecuteTask(UBehaviorTreeComponent& 
 	if (Target == nullptr) {
 		return EBTNodeResult::Failed;
 	}
-	
-	FVector LookVector = Target->GetActorLocation() - ControllingPawn->GetActorLocation();
-	LookVector.Normalize();
-	
 
+	TargetVector = FVector((Target->GetActorLocation() - ControllingPawn->GetActorLocation()).X, (Target->GetActorLocation() - ControllingPawn->GetActorLocation()).Y,0);
+	TargetVector.Normalize();
 
-	float dot = FVector::DotProduct(ControllingPawn->GetActorRightVector(), LookVector);
-
-	//right
-	if (dot >= 0) {
-		Cast<UMonsterAnimInstance>(ControllingPawn->GetAnimInst())->SetRightRotate(1.0f);
-	}
-	//Left
-	else {
-		Cast<UMonsterAnimInstance>(ControllingPawn->GetAnimInst())->SetRightRotate(-1.0f);
-	}
+	Dest = FindRotation(ControllingPawn);
 
 	return EBTNodeResult::InProgress;
 }
@@ -56,20 +46,37 @@ void UBTTask_TurnForMonster::TickTask(UBehaviorTreeComponent& OwnerComp, uint8* 
 		FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
 	}
 
-	FVector LookVector = Target->GetActorLocation() - ControllingPawn->GetActorLocation();
-	LookVector.Normalize();
+	ControllingPawn->SetActorRelativeRotation(UKismetMathLibrary::RInterpTo(ControllingPawn->GetActorRotation(), Dest, DeltaSeconds, LerpSpped));
 
-	float dot = FVector::DotProduct(ControllingPawn->GetActorForwardVector(), LookVector);
-
-	auto Goal = UKismetMathLibrary::FindLookAtRotation(ControllingPawn->GetActorForwardVector(), LookVector);
-	ControllingPawn->SetActorRelativeRotation(UKismetMathLibrary::RInterpTo(ControllingPawn->GetActorRotation(), Goal, DeltaSeconds, 1.5f));
-
-	auto angle = UKismetMathLibrary::RadiansToDegrees(FMath::Acos(dot));
 	
+	auto angle = UKismetMathLibrary::Acos(UKismetMathLibrary::Dot_VectorVector(ControllingPawn->GetActorForwardVector(), TargetVector));
+	angle = FMath::RadiansToDegrees(angle);
 
-	if (angle <= 3) {
+	if (angle <= 2* LerpSpped) {
 		Cast<UMonsterAnimInstance>(ControllingPawn->GetAnimInst())->SetRightRotate(0.0f);
 		FinishLatentTask(OwnerComp, EBTNodeResult::Succeeded);
 	}
+	else {
 
+		Dest = FindRotation(ControllingPawn);
+	}
+
+}
+FRotator UBTTask_TurnForMonster::FindRotation(ABaseMonster* ControllingPawn) {
+
+	FRotator Result;
+	float dotRight = FVector::DotProduct(ControllingPawn->GetActorRightVector(), TargetVector);
+
+	//right
+	if (dotRight >= 0) {
+		Cast<UMonsterAnimInstance>(ControllingPawn->GetAnimInst())->SetRightRotate(1.0f);
+	}
+	//Left
+	else {
+		Cast<UMonsterAnimInstance>(ControllingPawn->GetAnimInst())->SetRightRotate(-1.0f);
+	}
+
+
+	Result = UKismetMathLibrary::FindLookAtRotation(ControllingPawn->GetActorForwardVector(), TargetVector);
+	return Result;
 }

@@ -25,5 +25,5 @@ public:
 
 	//new
 	virtual void InitHitBox(UDataTable* data, USkeletalMeshComponent* mesh) override;
-	virtual bool ReceiveDamage(const FHitResult& hit, const FName socketName, float dmg,int32& outDmage, bool& weak) override;
+	virtual bool ReceiveDamage(const FHitResult& hit, const FName socketName, float dmg,int32& outDamage, bool& weak) override;
 };

@@ -5,5 +5,5 @@
 
 AMyPlayerCameraManager::AMyPlayerCameraManager() {
 	ViewPitchMin = -60;
-	ViewPitchMax = 20;
+	ViewPitchMax = -10;
 }

@@ -10,6 +10,7 @@
 #include "BehaviorTree/BlackboardData.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "Engine/TargetPoint.h"
+#include "MonsterAnimInstance.h"
 
 
 const FName AMonsterAIController::TargetDistanceKey(TEXT("TargetDistance"));
@@ -20,6 +21,7 @@ const FName AMonsterAIController::CurrentMonsterState(TEXT("MonsterState"));
 const FName AMonsterAIController::PreMonsterState(TEXT("PreMonsterState"));
 const FName AMonsterAIController::RandIntKey(TEXT("RandInt"));
 const FName AMonsterAIController::IsFlying(TEXT("IsFlying"));
+const FName AMonsterAIController::IsForwardDirection(TEXT("IsForwardDirection"));
 
 AMonsterAIController::AMonsterAIController() {
 	static ConstructorHelpers::FObjectFinder<UDataTable> REFDATA(TEXT("DataTable'/Game/DataTable/Monster/MonsterAITable.MonsterAITable'"));
@@ -45,10 +47,18 @@ void AMonsterAIController::OnPossess(APawn * InPawn)
 	Super::OnPossess(InPawn);
 
 	CurrnetMonster = Cast<ABaseMonster>(InPawn);
+	StateChangeDel.AddUObject(this, &AMonsterAIController::ChangeMonsterState);
 	SetUpData(CurrnetMonster);
 }
 void AMonsterAIController::Tick(float DeltaTime) {
 
+	if (IsDown) {
+		DownTimer += DeltaTime;
+		if (DownTimer >= 5.0f) {
+			DownTimer = 0.0f;
+			CurrnetMonster->GetAnimInst()->PlayGetUp();
+		}
+	}
 }
 
 void AMonsterAIController::OnUnPossess()
@@ -89,6 +99,8 @@ void AMonsterAIController::SetBehaviorTree(EMonsterState state) {
 	CurrentBB = AITable[state].BlackBoard;
 	CurrentBT = AITable[state].BehaviorTree;
 	
+	StopMovement();
+
 	if (UseBlackboard(CurrentBB, Blackboard)) {
 		Blackboard->SetValueAsObject(TargetPlayerKey, Target);
 		if (!RunBehaviorTree(CurrentBT)) {
@@ -99,6 +111,7 @@ void AMonsterAIController::SetBehaviorTree(EMonsterState state) {
 }
 void AMonsterAIController::ChangeMonsterState(EMonsterState state) {
 	if (CurrentState == state) return;
+
 	if (Blackboard != nullptr) {
 		Blackboard->SetValueAsEnum(PreMonsterState, (uint8)(CurrentState));
 		CurrentState = state;
@@ -112,10 +125,14 @@ void AMonsterAIController::ChangeMonsterState(EMonsterState state) {
 		case EMonsterState::E_IDLE:
 			SetBehaviorTree(EMonsterState::E_IDLE);
 			CurrnetMonster->ChangeMonsterState(EMonsterState::E_IDLE);
+			TESTLOG(Warning, TEXT("IDLE"));
 			break;
 		case EMonsterState::E_BATTLE:
 			SetBehaviorTree(EMonsterState::E_BATTLE);
 			CurrnetMonster->ChangeMonsterState(EMonsterState::E_BATTLE);
+			break;
+		case EMonsterState::E_RAGE:
+			TESTLOG(Warning, TEXT("RAGE!"));
 			break;
 		case EMonsterState::E_DEAD:
 			GetBrainComponent()->StopLogic(TEXT("Monster Is Dead"));
@@ -130,7 +147,6 @@ void AMonsterAIController::SetBrokenState(EMonsterPartsType brokenPart) {
 	switch (brokenPart)
 	{
 	case EMonsterPartsType::E_HEAD:
-		CurrnetMonster->PartBroken(brokenPart);
 		break;
 	case EMonsterPartsType::E_BODY:
 		break;
@@ -145,8 +161,9 @@ void AMonsterAIController::SetBrokenState(EMonsterPartsType brokenPart) {
 	case EMonsterPartsType::E_RIGHTLEG:
 		break;
 	case EMonsterPartsType::E_TAIL:
-		CurrnetMonster->PartBroken(brokenPart);
 		break;
 	}
+	CurrnetMonster->GetAnimInst()->PlayDown();
+	IsDown = true;
 }
 

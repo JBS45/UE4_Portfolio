@@ -20,5 +20,10 @@ public:
 	virtual EBTNodeResult::Type ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory) override;
 	virtual void TickTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, float DeltaSeconds) override;
 private:
-	float Timer;
+	UPROPERTY(EditAnywhere, Category = "Rotate", meta = (AllowPrivateAccess = "true"))
+		float LerpSpped;
+		FRotator Dest;
+		FVector TargetVector;
+private:
+	FRotator FindRotation(class ABaseMonster* ControllingPawn);
 };

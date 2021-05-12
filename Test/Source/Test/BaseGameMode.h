@@ -5,7 +5,6 @@
 #include "Test.h"
 #include "BaseStatus.h"
 #include "GameFramework/GameMode.h"
-#include "Assistant/BaseAssistant.h"
 #include "BaseGameMode.generated.h"
 
 /**

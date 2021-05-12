@@ -11,6 +11,8 @@
 /**
  * 
  */
+DECLARE_MULTICAST_DELEGATE_OneParam(FMonsterStateChange, EMonsterState);
+
 UCLASS()
 class TEST_API AMonsterAIController : public AAIController
 {
@@ -35,6 +37,9 @@ private:
 		EMonsterState CurrentState;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State", meta = (AllowPrivateAccess = "true"))
 		int32 BrokenPart;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State", meta = (AllowPrivateAccess = "true"))
+		bool IsDown;
+	float DownTimer;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Target", meta = (AllowPrivateAccess = "true"))
 		ABaseCharacter* Target;
@@ -44,6 +49,8 @@ private:
 private:
 	bool IsFoundPlayer = false;
 public:
+	FMonsterStateChange StateChangeDel;
+public:
 	static const FName TargetDistanceKey;
 	static const FName TargetPlayerKey;
 	static const FName TargetLocationKey;
@@ -52,6 +59,7 @@ public:
 	static const FName PreMonsterState;
 	static const FName RandIntKey;
 	static const FName IsFlying;
+	static const FName IsForwardDirection;
 public:
 	void SetUpData(class ABaseMonster* monster);
 	void SetTarget(ABaseCharacter* target);
@@ -61,5 +69,4 @@ public:
 	ABaseCharacter* GetTarget();
 	bool GetIsFoundPlayer() { return IsFoundPlayer; }
 	void SetBrokenState(EMonsterPartsType brokenPart);
-	//void SetUpPatrolPoints(TArray<class ATargetPoint*> arr);
 };

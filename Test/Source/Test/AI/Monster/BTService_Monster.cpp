@@ -7,8 +7,8 @@
 #include "../../Monster/BaseMonster.h"
 #include "../../Monster/MonsterArea.h"
 #include "../../Player/BaseCharacter.h"
-#include "../../Assistant/BaseAssistant.h"
 #include "BehaviorTree/BlackboardComponent.h"
+#include "Perception/PawnSensingComponent.h"
 
 
 UBTService_FindTargetForMonster::UBTService_FindTargetForMonster() {
@@ -38,6 +38,50 @@ void UBTService_FindTargetForMonster::TickNode(UBehaviorTreeComponent& OwnerComp
 	}
 	TESTLOG(Warning, TEXT("asd"));
 }
+
+UBTService_SearchForMonster::UBTService_SearchForMonster() {
+	NodeName = TEXT("Search");
+	Interval = 1.0f;
+}
+
+void UBTService_SearchForMonster::TickNode(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, float DeltaSeconds) {
+	Super::TickNode(OwnerComp, NodeMemory, DeltaSeconds);
+	auto ControllingPawn = Cast<ABaseMonster>((OwnerComp.GetAIOwner())->GetPawn());
+
+	auto Controller = Cast<AMonsterAIController>(OwnerComp.GetAIOwner());
+	if (ControllingPawn == nullptr) return;
+
+	auto target = ControllingPawn->GetTarget();
+	if (target == nullptr) {
+		Controller->SetTarget(nullptr);
+		return;
+	}
+
+	TArray<FHitResult> DetectResult;
+	TArray<AActor*> Ignore;
+	Ignore.Add(ControllingPawn);
+
+	UKismetSystemLibrary::SphereTraceMultiByProfile(ControllingPawn->GetWorld(),
+		ControllingPawn->GetActorLocation(),
+		ControllingPawn->GetActorLocation(),
+		ControllingPawn->GetDetectRange(),
+		TEXT("MonsterDamage"),
+		true, Ignore, EDrawDebugTrace::ForOneFrame,
+		DetectResult, true, FLinearColor::Blue, FLinearColor::Yellow, 1.0f);
+
+	TArray<AActor*> repeatedActor;
+
+	for (auto DetectCharacter : DetectResult) {
+
+		auto Character = Cast<IDamageInterface>(DetectCharacter.Actor);
+
+		if (Character != nullptr && !repeatedActor.Contains(DetectCharacter.GetActor())) {
+			Controller->SetTarget(Cast<ABaseCharacter>(DetectCharacter.Actor));
+			repeatedActor.Add(DetectCharacter.GetActor());
+		}
+	}
+}
+
 UBTService_CheckCanChangeBattle::UBTService_CheckCanChangeBattle() {
 	NodeName = TEXT("CheckChangeBattle");
 	Interval = 1.0f;
@@ -54,8 +98,8 @@ void UBTService_CheckCanChangeBattle::TickNode(UBehaviorTreeComponent& OwnerComp
 
 	if (Controller->GetIsFoundPlayer()) {
 		Timer += DeltaSeconds;
-		if (Timer >= 3.0f) {
-			Controller->ChangeMonsterState(EMonsterState::E_BATTLE);
+		if (Timer >= 10.0f) {
+			Controller->StateChangeDel.Broadcast(EMonsterState::E_BATTLE);
 		}
 	}
 	else {
@@ -102,6 +146,7 @@ void UBTService_CheckTargetInArea::TickNode(UBehaviorTreeComponent& OwnerComp, u
 UBTService_CheckTargetDistance::UBTService_CheckTargetDistance() {
 	NodeName = TEXT("CheckPlayerDistance");
 	Interval = 0.5f;
+	MaxChaseDistance = 3500.0f;
 }
 
 
@@ -116,14 +161,33 @@ void UBTService_CheckTargetDistance::TickNode(UBehaviorTreeComponent& OwnerComp,
 	float Distance = FVector::Dist(Target->GetActorLocation(), ControllingPawn->GetActorLocation());
 	OwnerComp.GetBlackboardComponent()->SetValueAsFloat(AMonsterAIController::TargetDistanceKey, Distance);
 	
+	if (Distance > MaxChaseDistance) {
+		OwnerComp.GetBlackboardComponent()->SetValueAsObject(AMonsterAIController::TargetPlayerKey,nullptr);
+		Cast<AMonsterAIController>(OwnerComp.GetAIOwner())->ChangeMonsterState(EMonsterState::E_IDLE);
+	}
 }
 
-UBTService_ChaseTarget::UBTService_ChaseTarget() {
-	NodeName = TEXT("ChasePlayer");
+UBTService_DecideForward::UBTService_DecideForward() {
+	NodeName = TEXT("DecideForward");
 	Interval = 0.5f;
 }
+void UBTService_DecideForward::TickNode(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, float DeltaSeconds) {
+	bool Result = true;
 
-void UBTService_ChaseTarget::TickNode(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, float DeltaSeconds) {
+	auto ControllingPawn = Cast<ABaseMonster>((OwnerComp.GetAIOwner())->GetPawn());
 	auto Target = Cast<ABaseCharacter>(OwnerComp.GetBlackboardComponent()->GetValueAsObject(AMonsterAIController::TargetPlayerKey));
-	OwnerComp.GetBlackboardComponent()->SetValueAsVector(AMonsterAIController::TargetLocationKey, Target->GetActorLocation());
+
+	FVector TargetDirection = (Target->GetActorLocation() - ControllingPawn->GetActorLocation());
+	FVector TargetDirection2D = FVector(TargetDirection.X, TargetDirection.Y, 0);
+	TargetDirection2D.Normalize();
+	float Dot = FVector::DotProduct(Target->GetActorForwardVector(), TargetDirection2D);
+
+	float back = FMath::Cos(FMath::DegreesToRadians(30));
+	TESTLOG(Warning, TEXT("%f"), back);
+	if (Dot <= back) {
+		Result = false;
+	}
+
+
+	OwnerComp.GetBlackboardComponent()->SetValueAsBool(AMonsterAIController::IsForwardDirection, Result);
 }

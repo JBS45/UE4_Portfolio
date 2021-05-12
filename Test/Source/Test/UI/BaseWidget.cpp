@@ -42,30 +42,6 @@ void UBaseWidget::NativeConstruct() {
 		DamageTextPool.Add(Damage);
 	}
 }
-void UBaseWidget::BindCharacterStatus(UCharacterStatusManager * status)
-{
-	if (status != nullptr) {
-		CurrentCharacterStatus = status;
-	}
-	CurrentCharacterStatus->OnStatusUpdate.BindUObject(this, &UBaseWidget::UpdateStatus);
-}
-
-void UBaseWidget::UpdateStatus()
-{
-	if (IsValid(CurrentCharacterStatus)) {
-		HPBar->SetPercent(CurrentCharacterStatus->GetHpRate());
-		StaminaBar->SetPercent(CurrentCharacterStatus->GetStaminaRate());
-	}
-}
-
-void UBaseWidget::UpdateCommand(TArray<FChainAction> chain) {
-	for (auto bar : CommandBars) {
-		bar->HideWidget();
-	}
-	for (int i = 0; i < chain.Num();++i) {
-		CommandBars[i]->SetCommand(chain[i].AttackName, chain[i].MoveCommand,chain[i].ActionCommand);
-	}
-}
 
 void UBaseWidget::SetCameraLockOn(bool IsOn) {
 	if (IsOn) {
@@ -90,5 +66,28 @@ void UBaseWidget::UseDamageText(class ABasePlayerController* control, FVector wo
 			element->UseDamagetText(control, worldlocation, damage, IsCritical);
 			break;
 		}
+	}
+}
+void UBaseWidget::NotifyStatusData(const FBaseCharacterStatus CharacterStatus) {
+	float HPRate = (float)CharacterStatus.CurrentHp / (float)CharacterStatus.MaxHp;
+	float StaminaRate = (float) CharacterStatus.CurrentStamina / (float)CharacterStatus.MaxStamina;
+	HPBar->SetPercent(HPRate);
+	StaminaBar->SetPercent(StaminaRate);
+}
+void UBaseWidget::NotifyChainData(const TArray<FChainAction> chain) {
+	TArray<FChainAction> VisibleChain;
+
+	for (auto element : chain) {
+		if (element.AttackType != ECommandName::E_LEFTSTEP
+			&& element.AttackType != ECommandName::E_RIGHTSTEP) {
+			VisibleChain.Add(element);
+		}
+	}
+
+	for (auto bar : CommandBars) {
+		bar->HideWidget();
+	}
+	for (int i = 0; i < VisibleChain.Num(); ++i) {
+		CommandBars[i]->SetCommand(VisibleChain[i].AttackName, VisibleChain[i].MoveCommand, VisibleChain[i].ActionCommand);
 	}
 }

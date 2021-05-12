@@ -21,7 +21,6 @@ void UMonsterAnimInstance::NativeUpdateAnimation(float DeltaSeconds) {
 		VelocityXY *= Dist;
 		CharSpeed = VelocityXY.Size();
 		auto Character = Cast<ABaseMonster>(Pawn);
-
 	}
 }
 
@@ -30,5 +29,30 @@ void UMonsterAnimInstance::PlayAnimation(UAnimMontage* montage, float rate) {
 
 	if (!Montage_IsPlaying(montage)) {
 		Montage_Play(montage, rate);
+	}
+}
+void UMonsterAnimInstance::PlayDown() {
+
+}
+void UMonsterAnimInstance::PlayGetUp() {
+
+}
+
+void UMonsterAnimInstance::ChangeMonsterState(EMonsterState state) {
+	if (CurrentState == state) return;
+	CurrentState = state;
+	switch (CurrentState) {
+	case EMonsterState::E_IDLE:
+		IsBattle = false;
+		break;
+	case EMonsterState::E_BATTLE:
+		IsBattle = true;
+		break;
+	case EMonsterState::E_RAGE:
+		IsBattle = true;
+		break;
+	case EMonsterState::E_DEAD:
+		IsAlive = false;
+		break;
 	}
 }

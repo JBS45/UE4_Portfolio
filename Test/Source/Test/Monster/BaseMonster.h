@@ -7,7 +7,7 @@
 #include "../BaseStatus.h"
 #include "GameFramework/Character.h"
 #include "../Components/DetectComponent.h"
-#include "../Components/DamageInterface.h"
+#include "../Components/MyInterface.h"
 #include "BaseMonster.generated.h"
 
 class UHitCollisionManager;
@@ -16,6 +16,11 @@ class UMonsterAnimInstance;
 class AMonsterAIController;
 class AMonsterArea;
 class ABaseCharacter;
+class USoundEffectComponent;
+class UPawnSensingComponent;
+struct FKTaperedCapsuleElem;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FSeePawnDelegate, APawn*, Pawn);
 
 UCLASS()
 class TEST_API ABaseMonster : public ACharacter, public IDamageInterface
@@ -50,11 +55,11 @@ public:
 	virtual void ApplyDamageFunc(const FHitResult& hit, const float AcitonDamageRate, const EDamageType DamageType = EDamageType::E_NORMAL, const float ImpactForce = 0);
 	virtual void TakeDamageFunc(bool& OutIsWeak, int32& OutFinalDamage, AActor* Causer, const FHitResult& hit, const float CaculateDamage, const EDamageType DamageType = EDamageType::E_NORMAL, const float ImpactForce = 0);
 	UFUNCTION()
-		virtual void OnOverlapBegin(class UPrimitiveComponent* OverlappedComp, class AActor* OtherActor, class UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+		void OnSeePawn(APawn *OtherPawn);
 
 public:
-	FORCEINLINE float GetAggroChangeTerm() const;
-	FORCEINLINE float GetAttackRange() const;
+	FORCEINLINE float GetAttackRange();
+	FORCEINLINE bool GetIsAlive();
 	FORCEINLINE void SetActiveArea(class AMonsterArea* area);
 	FORCEINLINE AMonsterArea* GetActiveArea();
 	FORCEINLINE UHitCollisionManager* GetCollisionManager();
@@ -66,20 +71,19 @@ public:
 	FORCEINLINE ABaseCharacter* GetTarget();
 	FORCEINLINE AMonsterAIController* GetMonsterController();
 	FORCEINLINE UMonsterAnimInstance* GetAnimInst();
+	FORCEINLINE UPawnSensingComponent* GetPawnSensing();
 	FORCEINLINE float GetRoarRange();
+	FORCEINLINE bool GetIsDown();
+	FORCEINLINE float GetDetectRange();
+	FORCEINLINE float GetDamage() const;
 
 	FORCEINLINE UAnimMontage* GetMontage(FString name) const;
 
-	void PartOverlapOn(EMonsterPartsType Parts);
-	void PartOverlapOff();
 	void SetMeleeDamage(float damageRate, float force, EDamageType type, EMonsterPartsType EnablePart);
-	TArray<UCapsuleComponent*> GetDamageBox(EMonsterPartsType Parts);
-	void HitCheck(FName Bone);
+	void HitCheck(USkeletalBodySetup* data, float damageRate, float knockbackDist, EDamageType damagetype);
 
 protected:
-	void GetDamageCapsules();
 	void SetDamageBox(TArray<class UCapsuleComponent*> arr);
-	void SetUpAnim(const FString DataRef);
 	void ResetDamagedPlayer();
 
 protected:
@@ -90,27 +94,41 @@ protected:
 		float RunSpeed = 200.0f;
 	UPROPERTY(VisibleAnywhere, Category = "CollisionManager", meta = (AllowPrivateAccess = "true"))
 		class UHitCollisionManager* HitBox;
-		TMultiMap<EMonsterPartsType,UCapsuleComponent*> DamageBox;
-		TMap<FString, UAnimMontage*> AnimationMap;
+	UPROPERTY(VisibleAnywhere, Category = "Hit", meta = (AllowPrivateAccess = "true"))
+		float HitRadius;
+
+	UPROPERTY(VisibleAnywhere, Category = "Detect", meta = (AllowPrivateAccess = "true"))
+		UPawnSensingComponent* Detect;
+	UPROPERTY(EditAnywhere, Category = "Detect", meta = (AllowPrivateAccess = "true"))
+		float PlayerDetectDistance;
+
+	UPROPERTY(VisibleAnywhere, Category = "Sound", meta = (AllowPrivateAccess = "true"))
+		USoundEffectComponent* SoundEffectComp;
 
 	UPROPERTY(VisibleAnywhere, Category = "Status", meta = (AllowPrivateAccess = "true"))
 		class UMonsterStatusManager* Status;
+	UPROPERTY(EditAnywhere, Category = "Status", meta = (AllowPrivateAccess = "true"))
+		float AttackRange;
+	UPROPERTY(EditAnywhere, Category = "Status", meta = (AllowPrivateAccess = "true"))
+		float RoarRange;
+
+
 	UPROPERTY(VisibleAnywhere, Category = "Status", meta = (AllowPrivateAccess = "true"))
 		FString MonsterName;
 	UPROPERTY(VisibleAnywhere, Category = "Status", meta = (AllowPrivateAccess = "true"))
 		uint8 MonsterID;
-	UPROPERTY(EditAnywhere, Category = "Status", meta = (AllowPrivateAccess = "true"))
-		float AttackRange;
-	UPROPERTY(EditAnywhere, Category = "Status", meta = (AllowPrivateAccess = "true"))
-		float AggroChangeTerm;
+
+
+
 	UPROPERTY(VisibleAnywhere, Category = "State", meta = (AllowPrivateAccess = "true"))
 		EMonsterState CurrentState;
-	UPROPERTY(VisibleAnywhere, Category = "State", meta = (AllowPrivateAccess = "true", Bitmask, BitmaskEnum = "EMonsterBrokenParts"))
+	UPROPERTY(EditAnywhere, Category = "State", meta = (AllowPrivateAccess = "true", Bitmask, BitmaskEnum = "EMonsterBrokenParts"))
 		int32 BrokenState;
-	UPROPERTY(EditAnywhere, Category = "State", meta = (AllowPrivateAccess = "true"))
-		float RoarRange = 2000.0f;
+
+
 	UPROPERTY(VisibleAnywhere, Category = "Animation", meta = (AllowPrivateAccess = "true"))
 		UMonsterAnimInstance* AnimInst;
+
 	UPROPERTY(VisibleAnywhere, Category = "AI", meta = (AllowPrivateAccess = "true"))
 		AMonsterAIController* MonsterController;
 
@@ -118,11 +136,6 @@ protected:
 		AMonsterArea* ActiveArea;
 	UPROPERTY(VisibleAnywhere, Category = "Area", meta = (AllowPrivateAccess = "true"))
 		ABaseCharacter* Target;
-
-	UPROPERTY(VisibleAnywhere, Category = "Detect", meta = (AllowPrivateAccess = "true"))
-		UDetectComponent* _Detect;
-	UPROPERTY(EditAnywhere, Category = "Detect", meta = (AllowPrivateAccess = "true"))
-		float DetectRange = 1500.0f;
 
 protected:
 	bool IsAttack = false;

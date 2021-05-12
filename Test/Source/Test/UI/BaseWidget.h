@@ -6,25 +6,25 @@
 #include "Blueprint/UserWidget.h"
 #include "../BaseStatus.h"
 #include "../BaseEnum.h"
+#include "../Components/MyInterface.h"
 #include "BaseWidget.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class TEST_API UBaseWidget : public UUserWidget
+class TEST_API UBaseWidget : public UUserWidget, public IStatusInterface, public IChainInterface
 {
 	GENERATED_BODY()
 protected:
 	virtual void NativeConstruct() override;
 	
 public:
-	void BindCharacterStatus(class UCharacterStatusManager* status);
-	void UpdateStatus();
-	void UpdateCommand(TArray<FChainAction> chainAction);
 	void SetCameraLockOn(bool IsOn);
 	void TraceTarget(class ABasePlayerController* control, class ABaseMonster* target);
 	void UseDamageText(class ABasePlayerController* control, FVector worldlocation, int32 damage, bool IsCritical);
+	virtual void NotifyStatusData(const FBaseCharacterStatus CharacterStatus) override;
+	virtual void NotifyChainData(const TArray<FChainAction> chain) override;
 private:
 	class UCharacterStatusManager* CurrentCharacterStatus;
 	class UCommandTableManager* CommandTable;

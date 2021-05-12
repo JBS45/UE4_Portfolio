@@ -15,6 +15,7 @@
 #define COMMAND_BASE_STATE "Base"
 #define COMMAND_DRAWWEAPON "Draw"
 #define COMMAND_PUTUPWEAPON "PutUp"
+#define COMMAND_SPECIAL "Special"
 #define COMMAND_EVADE "Evade"
 #define INPUT_BUFFER_DELAY 0.15f
 
@@ -51,15 +52,22 @@ private:
 	bool bPressedD = false;
 	bool bPressedA = false;
 
+	bool StateSpecial = false;
+
+	float BufferCheckTime = 0.0f;
 public:
 	FVoidDelegateAnimMontage PlayAnimEventDel;
+	FVoidDelegate PlayGetUpAnim;
+	FCheckCanEvadStamina EvadeConditionDel;
 private:
 	UPROPERTY(VisibleAnywhere, Category = "State")
 		EWeaponType CurrentWeapon;
 	UPROPERTY(VisibleAnywhere, Category = "State")
 		ECharacterState CurrentState;
 	UPROPERTY(VisibleAnywhere, Category = "State")
-		FString CurrentActionName;
+		ECommandName CurrentActionName;
+	UPROPERTY(VisibleAnywhere, Category = "State")
+		ECommandName ResetActionName;
 	UPROPERTY(VisibleAnywhere, Category = "BufferState")
 		bool CanBufferInput = true;
 
@@ -78,13 +86,16 @@ public:
 	void ChangeCharacterState(ECharacterState state);
 	void ChangeWeapon(EWeaponType weapon);
 
-	void ReadyForNextAction(FString newActionName);
+	void ReadyForNextAction(ECommandName newActionName);
 
-	void SetCurrentAction(FString actionName);
+	void SetCurrentAction(ECommandName actionName);
 	void ChainReset();
 	void PutUpWeapon();
+	void InputBufferChecker();
 
-//	TArray<EInputKey> GetCommandFromName(FString commandName) { return ((CurrentCommands->Find(commandName)->Commands[0]).Inputs); }
+	void SpecialOn();
+	void SpecialOff();
+
 
 private:
 	bool CheckCommand();
@@ -93,5 +104,9 @@ private:
 	void ActionBufferCheck();
 	void MoveBufferCheck();
 	void MoveAddInput(bool Pressed, FMoveInputInfo input);
-	void PlayAnimation(FString actionName);
+	void PlayAnimation(ECommandName actionName);
+	void CharacterStateTick();
+	bool EvadeOrStep();
+	bool EvadeAction(ECommandName actionName);
+	void ClearInputBuffer();
 };

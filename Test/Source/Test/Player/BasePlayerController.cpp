@@ -5,9 +5,10 @@
 #include "../Components/MyPlayerCameraManager.h"
 #include "../Monster/BaseMonster.h"
 #include "Kismet/KismetMathLibrary.h"
-#include "../Components/DamageInterface.h"
+#include "../Components/MyInterface.h"
 #include "../Input/InputBufferManager.h"
 #include "../Input/CommandTableManager.h"
+#include "../EffectClass.h"
 
 
 ABasePlayerController::ABasePlayerController() {
@@ -19,6 +20,7 @@ ABasePlayerController::ABasePlayerController() {
 	IsLockOn = false;
 
 	CurrentWeapon = EWeaponType::E_NOWEAPON;
+	PreState = ECharacterState::E_IDLE;
 }
 
 void ABasePlayerController::SetupInputComponent(){
@@ -49,46 +51,27 @@ void ABasePlayerController::SetupInputComponent(){
 	InputComponent->BindAction(TEXT("A"), EInputEvent::IE_Pressed, this, &ABasePlayerController::PressA);
 	InputComponent->BindAction(TEXT("A"), EInputEvent::IE_Released, this, &ABasePlayerController::ReleaseA);
 
+	EKey = FInputActionBinding(TEXT("E"), IE_Pressed);
+	MouseThumbKey = FInputActionBinding(TEXT("MouseThumbClick"), IE_Pressed);
 }
 
 void ABasePlayerController::BeginPlay() {
 	Super::BeginPlay();
 
 	TESTLOG(Warning, TEXT("player control begin play"));
+
+	InputBuffer->SetCommandTable(CommandTable);
+}
+
+void ABasePlayerController::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+	CameraLockOn(DeltaTime);
 }
 
 void ABasePlayerController::OnPossess(APawn* pawn) {
 	Super::OnPossess(pawn);
 
-	TESTLOG(Warning, TEXT("player control possess"));
-	
-	CurrentCharaceter = Cast<ABaseCharacter>(this->GetPawn());
-	CurrentCharaceter->SetInitWeapon();
-
-	ChangeStateDel.AddUObject(this, &ABasePlayerController::ChangeCharacterState);
-	ChangeStateDel.AddUObject(CurrentCharaceter, &ABaseCharacter::CharacterChangeState);
-	ChangeStateDel.AddUObject(InputBuffer, &UInputBufferManager::ChangeCharacterState);
-
-	ChangeWeaponDel.AddUObject(this, &ABasePlayerController::ChangeWeapon);
-	ChangeWeaponDel.AddUObject(CurrentCharaceter, &ABaseCharacter::ChangeWeapon);
-	ChangeWeaponDel.AddUObject(CommandTable, &UComandTableManager::ChangeCommandTable);
-	ChangeWeaponDel.AddUObject(InputBuffer, &UInputBufferManager::ChangeWeapon);
-
-	InputBuffer->SetCommandTable(CommandTable);
-
-	CurrentCharaceter->GetCharacterStatus()->OnCharacterDeadDel.BindUObject(this, &ABasePlayerController::OnDead);
-	CurrentCharaceter->GetCharacterStatus()->OnStaminaZeroDel.BindUObject(this, &ABasePlayerController::NoStatmina);
-
-	SprintDel.AddUObject(CurrentCharaceter, &ABaseCharacter::SetIsSprint);
-	SprintDel.AddUObject(CurrentCharaceter->GetCharacterStatus(), &UCharacterStatusManager::SetIsSprint);
-
-
-	AttachWidgetToViewport(HUDWidgetClass);
-
-	PlayerHUD->BindCharacterStatus(CurrentCharaceter->GetCharacterStatus());
-
-	CommandTable->NewActionChainDel.BindUObject(PlayerHUD, &UBaseWidget::UpdateCommand);
-	CurrentCharaceter->AttackDel.BindUObject(PlayerHUD, &UBaseWidget::UseDamageText);
 }
 
 
@@ -168,6 +151,12 @@ void ABasePlayerController::ReleaseA()
 {
 	InputBuffer->SetPressedA(false);
 }
+void ABasePlayerController::Special() {
+	FActionInputInfo input;
+	input.InputType = EActionKey::E_SPECIAL;
+	input.TimeStamp = GetWorld()->TimeSeconds;
+	InputBuffer->AddInputToInputBuffer(input);
+}
 
 
 void ABasePlayerController::CameraLookUp(float Value) {
@@ -184,19 +173,15 @@ void ABasePlayerController::CameraTurn(float Value) {
 		CurrentCharaceter->CameraTurn(Value);
 	}
 }
-/*void ABasePlayerController::CameraZoom(float Value) {
-
-	if (CurrentCharaceter)
-	{
-		CurrentCharaceter->CameraZoom(Value);
-	}
-}*/
 void ABasePlayerController::PressShift() {
 
 	IsSprint = true;
 	SprintDel.Broadcast(IsSprint);
 
-	InputBuffer->PutUpWeapon();
+	if (CharacterState == ECharacterState::E_BATTLE)
+	{
+		InputBuffer->PutUpWeapon();
+	}
 }
 void ABasePlayerController::ReleaseShift() {
 
@@ -220,6 +205,7 @@ void ABasePlayerController::MouseRightClick() {
 }
 void ABasePlayerController::SpaceKey() {
 	//AddInputBuffer(EInputKey::E_EVADE);
+	TESTLOG(Warning, TEXT("What?"));
 	FActionInputInfo input;
 	input.InputType = EActionKey::E_EVADE;
 	input.TimeStamp = GetWorld()->TimeSeconds;
@@ -228,6 +214,10 @@ void ABasePlayerController::SpaceKey() {
 
 void ABasePlayerController::ChangeCharacterState(ECharacterState state) {
 	if (CharacterState == state) return;
+	auto Temp = CharacterState;
+	if (Temp == ECharacterState::E_IDLE || Temp == ECharacterState::E_BATTLE) {
+		PreState = Temp;
+	}
 	CharacterState = state;
 	switch (CharacterState) {
 	case ECharacterState::E_IDLE:
@@ -244,44 +234,43 @@ void ABasePlayerController::ChangeCharacterState(ECharacterState state) {
 		break;
 	case ECharacterState::E_DEAD:
 		CanMove = false;
+		//OnUnPossess();
 		break;
 	}
 }
 void ABasePlayerController::ChangeWeapon(EWeaponType type) {
 	if (CurrentWeapon == type)return;
 	CurrentWeapon = type;
+	switch (CurrentWeapon) {
+	case EWeaponType::E_NOWEAPON:
+		MouseThumbKey.ActionDelegate.Unbind();
+		EKey.ActionDelegate.Unbind();
+		break;
+	case EWeaponType::E_DUAL:
+		MouseThumbKey.ActionDelegate.Unbind();
+		EKey.ActionDelegate.BindDelegate(this, &ABasePlayerController::Special);
+		break;
+	}
+	&InputComponent->AddActionBinding(EKey);
+	&InputComponent->AddActionBinding(MouseThumbKey);
 	
 }
 void ABasePlayerController::ToggleLockOn()
 {
+	if (IsValid(CurrentCharaceter) == false) return;
+
 	if (IsLockOn) {
-		IsLockOn = false;
+		CurrentCharaceter->GetLockOnDetect()->LockOff();
 		PlayerHUD->SetCameraLockOn(false);
 	}
 	else {
-		auto Array = CurrentCharaceter->GetTargetMonster();
-		if (Array.Num() > 0) {
-			if (Target == nullptr) {
-				Target = Cast<ABaseMonster>(Array[0]);
-			}
-			else {
-				if (!Array.Contains(Target)) {
-					Target = Cast<ABaseMonster>(Array[0]);
-				}
-			}
-		}
-
-		if (Target != nullptr) {
-			IsLockOn = true;
-			PlayerHUD->SetCameraLockOn(true);
-		}
-
+		CurrentCharaceter->GetLockOnDetect()->LockOnCamera();
 	}
 }
 
 void ABasePlayerController::ChangeLockOnTarget()
 {
-	if (IsLockOn) {
+	/*if (IsLockOn) {
 		auto Array = CurrentCharaceter->GetTargetMonster();
 		if (Array.Num() > 0) {
 			if (Target != nullptr) {
@@ -294,7 +283,7 @@ void ABasePlayerController::ChangeLockOnTarget()
 			}
 		}
 	}
-	//Todo : Next Target from iterator;
+	//Todo : Next Target from iterator;*/
 }
 void ABasePlayerController::AttachWidgetToViewport(TSubclassOf<class UBaseWidget> widget) {
 	if (widget != nullptr) {
@@ -307,22 +296,31 @@ void ABasePlayerController::AttachWidgetToViewport(TSubclassOf<class UBaseWidget
 }
 void ABasePlayerController::CameraLockOn(float deltaTime) {
 	if (IsLockOn) {
-		auto TargetRotation = UKismetMathLibrary::FindLookAtRotation(CurrentCharaceter->GetActorLocation(), Target->GetActorLocation());
-		auto TempRot = FMath::RInterpTo(GetControlRotation(), TargetRotation, deltaTime, 10.0f);
-		SetControlRotation(TempRot);
+		Target = CurrentCharaceter->GetLockOnDetect()->GetLockTarget();
+		auto DestRotation = UKismetMathLibrary::FindLookAtRotation(CurrentCharaceter->GetActorLocation(), Target->GetActorLocation());
+		auto TempRot = FMath::RInterpTo(GetControlRotation(), DestRotation, deltaTime, 10.0f);
+		if (TempRot.Pitch < PlayerCameraManager->ViewPitchMax) {
+			SetControlRotation(TempRot);
+		}
+		else {
+			TempRot.Pitch = PlayerCameraManager->ViewPitchMax;
+			SetControlRotation(TempRot);
+		}
 
-		PlayerHUD->TraceTarget(this,Target);
+		PlayerHUD->SetCameraLockOn(true);
+		PlayerHUD->TraceTarget(this, Target);
 
 		float Turn = FMath::Abs(InputComponent->GetAxisValue("Turn"));
 		float LookUp = FMath::Abs(InputComponent->GetAxisValue("LookUP"));
 		float Distance = FVector::Distance(CurrentCharaceter->GetActorLocation(), Target->GetActorLocation());
-		if (Turn >= 2.0f || LookUp >= 2.0f|| Distance> CurrentCharaceter->GetDetectRange()) {
-			IsLockOn = false;
+		if (Turn >= 2.0f || LookUp >= 2.0f || Distance > CurrentCharaceter->GetDetectRange()) {
+			CurrentCharaceter->GetLockOnDetect()->LockOff();
 			PlayerHUD->SetCameraLockOn(false);
 		}
 	}
-
 }
+
+
 ABaseMonster* ABasePlayerController::GetTarget() { 
 	return Target;
 }
@@ -336,4 +334,74 @@ void ABasePlayerController::NoStatmina() {
 }
 UInputBufferManager* ABasePlayerController::GetInputBuffer() {
 	return InputBuffer;
+}
+ECharacterState ABasePlayerController::GetPreState() const {
+	return PreState;
+}
+
+void ABasePlayerController::SpecialOn() {
+	InputBuffer->SpecialOn();
+	auto Effect = NewObject<UDualSpecial>();
+	Effect->BeginEffect(CurrentCharaceter);
+	CurrentCharaceter->SetEffects(Effect);
+}
+void ABasePlayerController::SpecialOff() {
+	auto Effects = CurrentCharaceter->GetEffects();
+	auto element = Effects->FindByPredicate([](UEffectClass* Lhs) {return (Lhs->GetIdentifier() == EEffectType::E_DUALSPECIAL); });
+	(*element)->EndEffect();
+}
+void ABasePlayerController::PossessInit(APawn* newPawn) {
+
+	CurrentCharaceter = Cast<ABaseCharacter>(newPawn);
+	CurrentCharaceter->SetInitWeapon();
+
+	if (CurrentCharaceter == nullptr)  return;
+	
+	/*Change State*/
+	ChangeStateDel.AddUObject(this, &ABasePlayerController::ChangeCharacterState);
+	ChangeStateDel.AddUObject(CurrentCharaceter, &ABaseCharacter::CharacterChangeState);
+	ChangeStateDel.AddUObject(InputBuffer, &UInputBufferManager::ChangeCharacterState);
+	ChangeStateDel.AddUObject(CurrentCharaceter->GetAnimInst(), &UBaseCharAnimInstance::CharacterChangeState);
+
+	/*Change Weapon*/
+	ChangeWeaponDel.AddUObject(this, &ABasePlayerController::ChangeWeapon);
+	ChangeWeaponDel.AddUObject(CurrentCharaceter, &ABaseCharacter::ChangeWeapon);
+	ChangeWeaponDel.AddUObject(CommandTable, &UComandTableManager::ChangeCommandTable);
+	ChangeWeaponDel.AddUObject(InputBuffer, &UInputBufferManager::ChangeWeapon);
+	ChangeWeaponDel.AddUObject(CurrentCharaceter->GetAnimInst(), &UBaseCharAnimInstance::ChangeWeapon);
+
+
+	InputBuffer->PlayAnimEventDel.BindUObject(CurrentCharaceter->GetAnimInst(), &UBaseCharAnimInstance::PlayAnimMontage);
+	InputBuffer->PlayGetUpAnim.BindUObject(CurrentCharaceter->GetAnimInst(), &UBaseCharAnimInstance::PlayGetUp);
+	InputBuffer->EvadeConditionDel.BindUObject(CurrentCharaceter->GetCharacterStatus(), &UCharacterStatusManager::EvadeStamina);
+
+	SprintDel.AddUObject(CurrentCharaceter, &ABaseCharacter::SetIsSprint);
+
+
+	CurrentCharaceter->GetAnimInst()->ChainResetDel.BindUObject(InputBuffer, &UInputBufferManager::ChainReset);
+
+	CurrentCharaceter->GetCharacterStatus()->OnCharacterDeadDel.BindUObject(this, &ABasePlayerController::OnDead);
+	CurrentCharaceter->GetCharacterStatus()->OnStaminaZeroDel.AddUObject(this, &ABasePlayerController::NoStatmina);
+
+
+	AttachWidgetToViewport(HUDWidgetClass);
+	CommandTable->Attach(PlayerHUD);
+	CurrentCharaceter->GetCharacterStatus()->Attach(PlayerHUD);
+	CurrentCharaceter->GetLockOnDetect()->Attach(this);
+	CurrentCharaceter->AttackDel.BindUObject(PlayerHUD, &UBaseWidget::UseDamageText);
+
+}
+void ABasePlayerController::PlayCharacter()
+{
+	ChangeStateDel.Broadcast(ECharacterState::E_IDLE);
+	ChangeWeaponDel.Broadcast(EWeaponType::E_DUAL);
+}
+
+void ABasePlayerController::NotifyLockOnData(bool isLockOn, ABaseMonster* target) {
+	this->IsLockOn = isLockOn;
+	this->Target = target;
+	
+	if (this->IsLockOn == false && this->Target == nullptr) {
+		PlayerHUD->SetCameraLockOn(false);
+	}
 }

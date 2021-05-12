@@ -16,23 +16,15 @@ void UCharacterStatusManager::BeginPlay()
 {
 	Super::BeginPlay();
 	IsAlive = true;
-	IsSprint = false;
 }
 
 // Called every frame
 void UCharacterStatusManager::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-	if (IsAlive) {
-		ReGen(DeltaTime);
-	}
-	if (IsSprint) {
-		SprintUseStamina(DeltaTime);
-	}
-	else {
+	if(StaminaUseFlag==0){
 		RegenStamina(DeltaTime);
 	}
-
 }
 void UCharacterStatusManager::StatusInit() {
 	CreateCharState();
@@ -87,50 +79,17 @@ void UCharacterStatusManager::UpdateStatus() {
 	
 	CharacterStatus.MaxHp = TempStatus.Hp;
 	CharacterStatus.MaxStamina = TempStatus.Stamina;
-	CharacterStatus.Dmg = TempStatus.Dmg;
+	CharacterStatus.Dmg = TempStatus.Dmg * BuffRate;
 	CharacterStatus.Def = TempStatus.Def;
 	CharacterStatus.CriticalRate = TempStatus.CriticalRate;
 
-	OnStatusUpdate.ExecuteIfBound();
-}
-
-void UCharacterStatusManager::ReGen(const float deltaTime) {
-	if (CharacterStatus.CurrentHp < CharacterStatus.MaxHp) {
-		CharacterStatus.CurrentHp += CharacterStatus.HpRegen*(deltaTime / ReGenBaseTime);
-	}
-	else {
-		CharacterStatus.CurrentHp = CharacterStatus.MaxHp;
-	}
-	OnStatusUpdate.ExecuteIfBound();
-}
-bool UCharacterStatusManager::UseStamina() {
-	if (CharacterStatus.CurrentStamina >= CharacterStatus.EvadeUseStaminaAmount) {
-		CharacterStatus.CurrentStamina -= CharacterStatus.EvadeUseStaminaAmount;
-
-		OnStatusUpdate.ExecuteIfBound();
-		return true;
-	}
-	return false;
+	Notify();
 }
 
 
-float UCharacterStatusManager::GetHpRate() {
-	return CharacterStatus.CurrentHp / CharacterStatus.MaxHp; 
-}
-float UCharacterStatusManager::GetStaminaRate() {
-	return CharacterStatus.CurrentStamina / CharacterStatus.MaxStamina; 
-}
-float UCharacterStatusManager::GetDamage() {
-	return CharacterStatus.Dmg; 
-}
-float UCharacterStatusManager::GetCritical() {
-	return CharacterStatus.CriticalRate; 
-}
-void UCharacterStatusManager::SetIsSprint(bool value) {
-	IsSprint = value; 
-}
 int32 UCharacterStatusManager::TakeDamage(float Damage) {
 	int32 FinalDamage = 0;
+
 	if (CharacterStatus.Def <= 0) {
 		FinalDamage = FMath::FloorToInt(Damage);
 	}
@@ -144,7 +103,31 @@ int32 UCharacterStatusManager::TakeDamage(float Damage) {
 		OnCharacterDeadDel.Execute();
 	}
 
+	Notify();
+
 	return FinalDamage;
+}
+bool UCharacterStatusManager::EvadeStamina() {
+	if (CharacterStatus.CurrentStamina >= CharacterStatus.EvadeUseStaminaAmount) {
+		CharacterStatus.CurrentStamina -= CharacterStatus.EvadeUseStaminaAmount;
+		Notify();
+		return true;
+	}
+	else {
+		return false;
+	}
+}
+
+void UCharacterStatusManager::ConsumeStamina(float value, float delta) {
+	if (CharacterStatus.CurrentStamina > value * (delta / ReGenBaseTime)) {
+		CharacterStatus.CurrentStamina -= value * (delta / ReGenBaseTime);
+	}
+	else {
+		CharacterStatus.CurrentStamina = 0;
+		StaminaUseFlag = 0;
+		OnStaminaZeroDel.Broadcast();
+	}
+	Notify();
 }
 
 
@@ -155,16 +138,9 @@ void UCharacterStatusManager::RegenStamina(float delta) {
 	else {
 		CharacterStatus.CurrentStamina = CharacterStatus.MaxStamina;
 	}
+	Notify();
 }
-void UCharacterStatusManager::SprintUseStamina(float delta) {
-	if (CharacterStatus.CurrentStamina > 0) {
-		CharacterStatus.CurrentStamina -= CharacterStatus.StaminaConsumeSprint* (delta / ReGenBaseTime);
-	}
-	else {
-		CharacterStatus.CurrentStamina = 0;
-		OnStaminaZeroDel.Execute();
-	}
-}
+
 
 const FBaseStatus FBaseStatus::operator+(const FBaseStatus& rhs) {
 	return FBaseStatus(*this) += rhs;
@@ -177,4 +153,39 @@ FBaseStatus& FBaseStatus::operator+=(const FBaseStatus& rhs) {
 	this->Def += rhs.Def;
 	this->CriticalRate += rhs.CriticalRate;
 	return *this;
+}
+
+void UCharacterStatusManager::Attach(IStatusInterface* newObserver) {
+	StatusObservers.Add(newObserver);
+}
+
+void UCharacterStatusManager::Notify() {
+	for (auto observer : StatusObservers) {
+		observer->NotifyStatusData(CharacterStatus);
+	}
+}
+
+float UCharacterStatusManager::GetDamage() {
+	return CharacterStatus.Dmg;
+}
+
+float UCharacterStatusManager::GetCritical() {
+	return CharacterStatus.CriticalRate;
+}
+
+float UCharacterStatusManager::GetConsumeSprint() const {
+	return CharacterStatus.StaminaConsumeSprint;
+}
+
+void UCharacterStatusManager::SetBuffRate(float value) {
+	BuffRate = value;
+}
+
+void UCharacterStatusManager::StaminaUse(ECharacterStaminaUse type, bool IsOn) {
+	if (IsOn) {
+		StaminaUseFlag |= (int32)type;
+	}
+	else {
+		StaminaUseFlag = (~(int32)type)&StaminaUseFlag;
+	}
 }

@@ -6,6 +6,7 @@
 #include "../BaseStatus.h"
 #include "../BaseEnum.h"
 #include "Components/ActorComponent.h"
+#include "MyInterface.h"
 #include "CharacterStatusManager.generated.h"
 
 
@@ -30,35 +31,40 @@ public:
 private:
 	const float ReGenBaseTime = 1.0f;
 
+	UPROPERTY(VisibleAnywhere, Category = "State", meta = (AllowPrivateAccess = "true", Bitmask, BitmaskEnum = "ECharacterStaminaUse"))
+		int32 StaminaUseFlag;
+
 	bool IsAlive;
-	bool IsSprint;
+	
+	float BuffRate = 1.0f;
+
 	UPROPERTY(VisibleAnywhere, Category = "Status")
 		FBaseCharacterStatus CharacterStatus;
+	TArray<IStatusInterface*> StatusObservers;
 public:	
-
-	FVoidDelegate OnStatusUpdate;
 	FVoidDelegate OnCharacterDeadDel;
-	FVoidDelegate OnStaminaZeroDel;
+	FVoidMultiDelegate OnStaminaZeroDel;
 
 	// Called every frame
 
 	void StatusInit();
 	void EquipItem(const FEquipmentStatus item);
-	void ReGen(const float deltaTime);
-	bool UseStamina();
 
-	float GetHpRate();
-	float GetStaminaRate();
 	float GetDamage();
 	float GetCritical();
 
-	void SetIsSprint(bool value);
+	void ConsumeStamina(float value, float delta);
+	bool EvadeStamina();
 	int32 TakeDamage(float Damage);
 
+	FORCEINLINE void Attach(IStatusInterface* newObserver);
+	FORCEINLINE float GetConsumeSprint() const;
+	FORCEINLINE void StaminaUse(ECharacterStaminaUse type, bool IsOn);
+	FORCEINLINE void SetBuffRate(float value);
 private:
 	void CreateCharState();
 	void UpdateStatus();
 
 	void RegenStamina(float delta);
-	void SprintUseStamina(float delta);
+	void Notify();
 };

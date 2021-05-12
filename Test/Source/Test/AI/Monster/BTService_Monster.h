@@ -19,6 +19,17 @@ public:
 protected:
 	virtual void TickNode(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, float DeltaSeconds) override;
 };
+
+UCLASS()
+class TEST_API UBTService_SearchForMonster : public UBTService
+{
+	GENERATED_BODY()
+public:
+	UBTService_SearchForMonster();
+
+protected:
+	virtual void TickNode(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, float DeltaSeconds) override;
+};
 UCLASS()
 class TEST_API UBTService_CheckCanChangeBattle : public UBTService
 {
@@ -62,14 +73,18 @@ public:
 
 protected:
 	virtual void TickNode(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, float DeltaSeconds) override;
+private:
+	UPROPERTY(EditAnywhere, Category = "MaxDistance", meta = (AllowPrivateAccess = "true"))
+		float MaxChaseDistance;
 };
 
+
 UCLASS()
-class TEST_API UBTService_ChaseTarget : public UBTService
+class TEST_API UBTService_DecideForward : public UBTService
 {
 	GENERATED_BODY()
 public:
-	UBTService_ChaseTarget();
+	UBTService_DecideForward();
 
 protected:
 	virtual void TickNode(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, float DeltaSeconds) override;

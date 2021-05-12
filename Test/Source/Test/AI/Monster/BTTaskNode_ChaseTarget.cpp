@@ -13,7 +13,6 @@
 
 UBTTaskNode_ChaseTarget::UBTTaskNode_ChaseTarget() {
 	NodeName = TEXT("ChaseTarget");
-	bNotifyTick = true;
 }
 
 EBTNodeResult::Type UBTTaskNode_ChaseTarget::ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory) {
@@ -24,22 +23,32 @@ EBTNodeResult::Type UBTTaskNode_ChaseTarget::ExecuteTask(UBehaviorTreeComponent&
 		return EBTNodeResult::Failed;
 	}
 
+
 	Target = Cast<ABaseCharacter>(OwnerComp.GetBlackboardComponent()->GetValueAsObject(AMonsterAIController::TargetPlayerKey));
 	
-	ControllingPawn->GetMonsterController()->MoveToActor(Target, AcceptableRadius);
+	auto ChaseResult = ControllingPawn->GetMonsterController()->MoveToActor(Target, AcceptableRadius);
 
-	bBegin = true;
-
-	return EBTNodeResult::InProgress;
+	if (ChaseResult != EPathFollowingRequestResult::Failed) {
+		TESTLOG(Warning, TEXT("Success"));
+		return EBTNodeResult::Succeeded;
+	}
+	return EBTNodeResult::Failed;
 }
-void UBTTaskNode_ChaseTarget::TickTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, float DeltaSeconds) {
-	if (!bBegin) return;
 
-	if (OwnerComp.GetBlackboardComponent()->GetValueAsFloat(AMonsterAIController::TargetDistanceKey)<= AcceptableRadius) {
-		TESTLOG(Warning, TEXT("Wow"));
-		FinishLatentTask(OwnerComp, EBTNodeResult::Succeeded);
+UBTTaskNode_ChaseFail::UBTTaskNode_ChaseFail() {
+	NodeName = TEXT("ChaseFail");
+}
+
+EBTNodeResult::Type UBTTaskNode_ChaseFail::ExecuteTask(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory) {
+	EBTNodeResult::Type result = Super::ExecuteTask(OwnerComp, NodeMemory);
+
+	auto Control = Cast<AMonsterAIController>(OwnerComp.GetAIOwner());
+	if (Control == nullptr) {
+		return EBTNodeResult::Failed;
 	}
-	if (Target == nullptr) {
-		FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
-	}
+
+	Control->ChangeMonsterState(EMonsterState::E_IDLE);
+
+	
+	return EBTNodeResult::Succeeded;
 }

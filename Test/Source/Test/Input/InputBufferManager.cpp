@@ -15,7 +15,9 @@ UInputBufferManager::UInputBufferManager()
 
 	// ...
 	CurrentWeapon = EWeaponType::E_NOWEAPON;
-	CurrentActionName = "Base";
+	CurrentActionName = ECommandName::E_BASE;
+	ResetActionName = ECommandName::E_BASE;
+	StateSpecial = false;
 }
 
 
@@ -27,7 +29,10 @@ void UInputBufferManager::BeginPlay()
 
 	//CommandTable->ActiveActionDel.AddUObject(this, &UInputBufferManager::SetCurrentAction);
 	// ...
-	ChainReset();
+	bPressedW = false;
+	bPressedS = false;
+	bPressedD = false;
+	bPressedA = false;
 }
 
 
@@ -35,10 +40,9 @@ void UInputBufferManager::BeginPlay()
 void UInputBufferManager::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-	ActionBufferCheck();
-	MoveBufferCheck();
-	//CheckBufferTime();
-	// ...
+
+	CharacterStateTick();
+
 }
 
 void UInputBufferManager::AddInputToInputBuffer(FMoveInputInfo input)
@@ -63,17 +67,24 @@ void UInputBufferManager::AddInputToInputBuffer(FMoveInputInfo input)
 }
 void UInputBufferManager::MoveAddInput(bool Pressed, FMoveInputInfo input)
 {
-	if (MoveInputBuffer.Num() <= 0) return;
-
-	if (Pressed) {
-		int index = MoveInputBuffer.FindLastByPredicate([input](const FMoveInputInfo Lhs) {return Lhs.InputType == input.InputType;});
-		MoveInputBuffer[index].TimeStamp = input.TimeStamp;
+	if (MoveInputBuffer.Num() <= 0) 
+	{
+		MoveInputBuffer.Add(input);
 	}
 	else {
-		if (MoveInputBuffer.Num() > 5) {
-			MoveInputBuffer.RemoveAt(0);
+
+		if (Pressed) {
+			int index = MoveInputBuffer.FindLastByPredicate([input](const FMoveInputInfo Lhs) {return Lhs.InputType == input.InputType; });
+			if (index != INDEX_NONE) {
+				MoveInputBuffer[index].TimeStamp = input.TimeStamp;
+			}
 		}
-		MoveInputBuffer.Add(input);;
+		else {
+			if (MoveInputBuffer.Num() > 5) {
+				MoveInputBuffer.RemoveAt(0);
+			}
+			MoveInputBuffer.Add(input);
+		}
 	}
 }
 
@@ -81,27 +92,38 @@ void UInputBufferManager::AddInputToInputBuffer(FActionInputInfo input)
 {
 	if (!CanBufferInput) return;
 
-	if (ActionInputBuffer.Num() > 2) {
+	if (input.InputType == EActionKey::E_EVADE) {
+		EvadeOrStep();
+		return;
+	}
+	if (ActionInputBuffer.Num() == 0) {
+		BufferCheckTime = input.TimeStamp;
+	}
+	if (ActionInputBuffer.ContainsByPredicate([input](const FActionInputInfo Lhs) {return Lhs.InputType == input.InputType;})){
+		auto Pressing = ActionInputBuffer.FindByPredicate([input](const FActionInputInfo Lhs) {return Lhs.InputType == input.InputType; });
+		Pressing->TimeStamp = input.TimeStamp;
+		return;
+	}
+	if (ActionInputBuffer.Num() > 5) {
 		ActionInputBuffer.RemoveAt(0);
 	}
 	ActionInputBuffer.Add(input);;
 }
 
 void UInputBufferManager::ChainReset() {
-	switch (CurrentState) {
-	case ECharacterState::E_BATTLE:
-		ReadyForNextAction(COMMAND_DRAWWEAPON);
-		break;
-	default:
-		ReadyForNextAction(COMMAND_BASE_STATE);
-		break;
-	}
+
+	ReadyForNextAction(ResetActionName);
 	CanBufferInput = true;
+}
+
+void UInputBufferManager::ReadyForNextAction(ECommandName newActionName) {
+	CurrentActionName = newActionName;
+	CommandTable->SetCurrentCommandName(newActionName);
 }
 
 void UInputBufferManager::PutUpWeapon() {
 	if (CurrentState == ECharacterState::E_BATTLE) {
-		PlayAnimation(COMMAND_PUTUPWEAPON);
+		PlayAnimation(ECommandName::E_PUTUP);
 	}
 }
 
@@ -111,17 +133,11 @@ void UInputBufferManager::ActionBufferCheck()
 	
 	if (ActionInputBuffer.Num() <= 0) return;
 
-	int last = ActionInputBuffer.Num() - 1;
-	if (ActionInputBuffer[last].InputType == EActionKey::E_EVADE) {
-		PlayAnimation(COMMAND_EVADE);
-		ActionInputBuffer.Empty();
-		MoveInputBuffer.Empty();
-	}
-	else if (ActionInputBuffer[last].TimeStamp + INPUT_BUFFER_DELAY <= GetWorld()->GetTimeSeconds()) {
+	if (BufferCheckTime + INPUT_BUFFER_DELAY <= GetWorld()->GetTimeSeconds()) {
 		CheckCommand();
 	}
 	for (int i = 0; i < ActionInputBuffer.Num();) {
-		if (ActionInputBuffer[i].TimeStamp + (2 * INPUT_BUFFER_DELAY) <= GetWorld()->GetTimeSeconds()) {
+		if (ActionInputBuffer[i].TimeStamp + INPUT_BUFFER_DELAY <= GetWorld()->GetTimeSeconds()) {
 			ActionInputBuffer.RemoveAt(i);
 			continue;
 		}
@@ -139,8 +155,9 @@ void UInputBufferManager::MoveBufferCheck() {
 }
 bool UInputBufferManager::CheckCommand() {
 	auto EnableActionName = CommandTable->FindEnableAction(CurrentActionName);
+	BufferCheckTime = 0.0f;
 
-	TMap<ECommnadPriority, FString> CandidateAction;
+	TMap<ECommnadPriority, ECommandName> CandidateAction;
 	
 	for (auto ActionName : EnableActionName)
 	{
@@ -157,28 +174,33 @@ bool UInputBufferManager::CheckCommand() {
 		}
 		bool ValidAction = ActionCommnadCheck(ActionCommands, ActionTimer);
 
-		if (ValidMove && ValidAction && (MoveTimer <= ActionTimer)) {
-			CandidateAction.Add(AciontInfo.Priority, AciontInfo.AttackName);
+		if (ValidMove && ValidAction) {
+			CandidateAction.Add(AciontInfo.Priority, AciontInfo.AttackType);
 		}
 	}
 	if (CandidateAction.Contains(ECommnadPriority::E_HIGH)) {
 		auto actionName = CandidateAction.Find(ECommnadPriority::E_HIGH);
 		PlayAnimation(*actionName);
-		//Active this;
+		ClearInputBuffer();
+		return true;
 	}
 	else if (CandidateAction.Contains(ECommnadPriority::E_NORMAL)) {
 		auto actionName = CandidateAction.Find(ECommnadPriority::E_NORMAL);
 		PlayAnimation(*actionName);
+		ClearInputBuffer();
+		return true;
 	}
 	else if(CandidateAction.Contains(ECommnadPriority::E_LOW)) {
 		auto actionName = CandidateAction.Find(ECommnadPriority::E_LOW);
 		PlayAnimation(*actionName);
+		ClearInputBuffer();
+		return true;
 	}
 	else {
+		ClearInputBuffer();
 		return false;
 	}
-	ActionInputBuffer.Empty();
-	MoveInputBuffer.Empty();
+
 
 	return true;
 }
@@ -197,7 +219,7 @@ bool UInputBufferManager::MoveCommnadCheck(TArray<EMoveKey> Command, float& Last
 		
 		int last = MoveInputBuffer.Num() - 1;
 
-		if ((Command[0] == EMoveKey::E_ALLMOVE && MoveInputBuffer.Num() > 0) 
+		if (Command[0] == EMoveKey::E_ALLMOVE
 			|| (Command[0] == MoveInputBuffer[last].InputType)) {
 			LastInput = MoveInputBuffer[last].TimeStamp;
 			return true;
@@ -248,19 +270,26 @@ bool UInputBufferManager::ActionCommnadCheck(TArray<EActionKey> Command, float& 
 	return false;
 }
 
-
-void UInputBufferManager::ReadyForNextAction(FString newActionName) {
-	CurrentActionName = newActionName;
-	CommandTable->SetCurrentCommandName(newActionName);
-}
 void UInputBufferManager::ChangeCharacterState(ECharacterState state) {
 	if (CurrentState == state) return;
 	CurrentState = state;
 	switch (CurrentState) {
 	case ECharacterState::E_IDLE:
+		if (StateSpecial) {
+			ResetActionName = ECommandName::E_SPECIAL;
+		}
+		else {
+			ResetActionName = ECommandName::E_BASE;
+		}
 		CanBufferInput = true;
 		break;
 	case ECharacterState::E_BATTLE:
+		if (StateSpecial) {
+			ResetActionName = ECommandName::E_SPECIALDRAW;
+		}
+		else {
+			ResetActionName = ECommandName::E_DRAW;
+		}
 		CanBufferInput = true;
 		break;
 	case ECharacterState::E_HIT:
@@ -274,18 +303,40 @@ void UInputBufferManager::ChangeCharacterState(ECharacterState state) {
 		break;
 	}
 }
+void UInputBufferManager::CharacterStateTick() {
+	switch (CurrentState) {
+	case ECharacterState::E_IDLE:
+	case ECharacterState::E_BATTLE:
+		ActionBufferCheck();
+		MoveBufferCheck();
+		break;
+	case ECharacterState::E_DOWN:
+		if (ActionInputBuffer.Num()>0) {
+			TESTLOG(Warning, TEXT("Down Getup"));
+			CanBufferInput = false;
+			PlayGetUpAnim.Execute();
+			ActionInputBuffer.Reset();
+			MoveInputBuffer.Reset();
+		}
+		break;
+	case ECharacterState::E_DEAD:
+		break;
+	}
+}
 void  UInputBufferManager::ChangeWeapon(EWeaponType weapon) {
 	if (CurrentWeapon == weapon) return;
 	CurrentWeapon = weapon;
 
 	switch (CurrentWeapon) {
 	case EWeaponType::E_NOWEAPON:
+		CommandTable->ChangeCommandTable(EWeaponType::E_NOWEAPON);
 		break;
 	case EWeaponType::E_DUAL:
+		CommandTable->ChangeCommandTable(EWeaponType::E_DUAL);
 		break;
 	}
 
-	CurrentActionName = "Base";
+	CurrentActionName = ECommandName::E_BASE;
 	ChainReset();
 }
 
@@ -301,7 +352,7 @@ void UInputBufferManager::InputBufferClose()
 { 
 	CanBufferInput = false;
 }
-void UInputBufferManager::SetCurrentAction(FString actionName) {
+void UInputBufferManager::SetCurrentAction(ECommandName actionName) {
 	CurrentActionName = actionName;
 }
 void UInputBufferManager::SetPressedW(bool value) {
@@ -317,21 +368,94 @@ void UInputBufferManager::SetPressedA(bool value) {
 	bPressedA = value;
 }
 
-void UInputBufferManager::PlayAnimation(FString actionName) {
-	auto Anim = CommandTable->FindAction(*actionName);
-	ReadyForNextAction(*actionName);
-	PlayAnimEventDel.Execute(Anim.ActionMontage);
+void UInputBufferManager::PlayAnimation(ECommandName actionName) {
+	if (StateSpecial&&actionName == ECommandName::E_BASE) {
+		auto controller = Cast<ABasePlayerController>(GetOwner());
+		controller->SpecialOff();
+		ReadyForNextAction(actionName);
+	}
+	else {
+		auto Anim = CommandTable->FindAction(actionName);
+		ReadyForNextAction(actionName);
+		PlayAnimEventDel.Execute(Anim.ActionMontage);
+	}
 }
-/*bool FMoveInputInfo::operator==(const FMoveInputInfo& other) const {
-	if (this->InputType == other.InputType) {
-		if ((other.TimeStamp - this->TimeStamp) <= INPUT_BUFFER_DELAY*2) {
+void UInputBufferManager::InputBufferChecker() {
+	if (ActionInputBuffer.Num() <= 0) {
+		return;
+	}
+	ChainReset();
+}
+void UInputBufferManager::SpecialOn() {
+	StateSpecial = true;
+	ResetActionName = ECommandName::E_SPECIAL;
+	ReadyForNextAction(ECommandName::E_SPECIAL);
+}
+void UInputBufferManager::SpecialOff() {
+	StateSpecial = false;
+	if (CurrentActionName == ECommandName::E_BASE
+		|| CurrentActionName == ECommandName::E_SPECIAL) {
+		ResetActionName = ECommandName::E_BASE;
+	}
+	else {
+		ResetActionName = ECommandName::E_DRAW;
+	}
+}
+
+bool UInputBufferManager::EvadeOrStep() {
+	if (CurrentActionName == ECommandName::E_BASE
+		|| CurrentActionName == ECommandName::E_DRAW
+		|| CurrentActionName == ECommandName::E_SPECIAL
+		|| CurrentActionName == ECommandName::E_EVADE) {
+		if (EvadeAction(ECommandName::E_EVADE)) {
 			return true;
-		}
-		else {
-			return false;
 		}
 	}
 	else {
-		return false;
+		auto EnableAction = CommandTable->FindEnableAction(CurrentActionName);
+		if (EnableAction.Contains(ECommandName::E_LEFTSTEP)) {
+			auto Left = MoveInputBuffer.FindByPredicate([](const FMoveInputInfo Lhs) {return Lhs.InputType == EMoveKey::E_LEFT; });
+			auto Right = MoveInputBuffer.FindByPredicate([](const FMoveInputInfo Lhs) {return Lhs.InputType == EMoveKey::E_RIGHT; });
+
+			if (Left != nullptr&&Right != nullptr) {
+				if (Left->TimeStamp >= Right->TimeStamp) {
+					if (EvadeAction(ECommandName::E_LEFTSTEP)) {
+						return true;
+					}
+				}
+				else {
+					if (EvadeAction(ECommandName::E_RIGHTSTEP)) {
+						return true;
+					}
+				}
+			}
+			else if (Right != nullptr) {
+				if (EvadeAction(ECommandName::E_LEFTSTEP)) {
+					return true;
+				}
+			}
+			else if (Left != nullptr) {
+				if (EvadeAction(ECommandName::E_RIGHTSTEP)) {
+					return true;
+				}
+			}
+		}
 	}
-}*/
+	return false;
+}
+bool UInputBufferManager::EvadeAction(ECommandName actionName) {
+	if (EvadeConditionDel.Execute()) {
+		PlayAnimation(actionName);
+		BufferCheckTime = 0.0f;
+		ActionInputBuffer.Reset();
+		MoveInputBuffer.Reset();
+		return true;
+	}
+	return false;
+}
+void UInputBufferManager::ClearInputBuffer() {
+	ActionInputBuffer.Reset();
+	if (MoveInputBuffer.Num() > 0) {
+		MoveInputBuffer.Reset();
+	}
+}

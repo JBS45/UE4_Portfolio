@@ -11,6 +11,9 @@
 #include "Collision/HitCollisionManager.h"
 #include "DrawDebugHelpers.h"
 #include "Kismet/GameplayStatics.h"
+#include "Components/AudioComponent.h"
+#include "Components/SoundEffectComponent.h"
+#include "Sound/SoundCue.h"
 
 // Sets default values
 ABaseWeapon::ABaseWeapon()
@@ -26,17 +29,19 @@ ABaseWeapon::ABaseWeapon()
 	Collision->SetCollisionObjectType(ECC_GameTraceChannel7);
 	Collision->SetCollisionProfileName("PlayerDamage");
 
-	TrailParticle = CreateDefaultSubobject<UParticleSystemComponent>("TrailParticle");
-	TrailParticle->SetupAttachment(Mesh);
+	TrailParticle1 = CreateDefaultSubobject<UParticleSystemComponent>("TrailParticle1");
+	TrailParticle1->SetupAttachment(Mesh);
+
+	TrailParticle2 = CreateDefaultSubobject<UParticleSystemComponent>("TrailParticle2");
+	TrailParticle2->SetupAttachment(Mesh);
 
 
-	static ConstructorHelpers::FObjectFinder<UParticleSystem>TRAIL_TEMPLATE(TEXT("ParticleSystem'/Game/AdvancedMagicFX12/particles/P_ky_trail_thunder.P_ky_trail_thunder'"));
-	UParticleSystem* TempTemplate = nullptr;
-	if (TRAIL_TEMPLATE.Succeeded()) {
-		TempTemplate = TRAIL_TEMPLATE.Object;
-	}
+	SwingAudio = CreateDefaultSubobject< USoundEffectComponent>("Swing");
+	//SwingAudio->SetupAttachment(Mesh);
 
-	TrailParticle->Template = TempTemplate;
+	HitAudio = CreateDefaultSubobject< USoundEffectComponent>("Hit");
+	//HitAudio->SetupAttachment(Mesh);
+
 }
 
 // Called when the game starts or when spawned
@@ -140,11 +145,26 @@ void ABaseWeapon::SetOverlapEvent(bool IsOn) {
 	ResetDamagedMonster();
 }
 
-void ABaseWeapon::TrailOn(ETrailWidthMode type, float value) {
-	TrailParticle->BeginTrails("TrailStart", "TrailCenter", type, value);
+void ABaseWeapon::TrailOn() {
+	TrailParticle1->Activate(true);
+	TrailParticle2->Activate(true);
+	TrailParticle1->BeginTrails("TrailStart", "TrailCenter", ETrailWidthMode::ETrailWidthMode_FromCentre, TrailValue);
+	TrailParticle2->BeginTrails("TrailStart", "TrailCenter", ETrailWidthMode::ETrailWidthMode_FromCentre, TrailValue);
 }
 void ABaseWeapon::TrailOff() {
-	TrailParticle->EndTrails();
+	TrailParticle1->EndTrails();
+	TrailParticle2->EndTrails();
+	TrailParticle1->Complete();
+	TrailParticle2->Complete();
+}
+
+void ABaseWeapon::TrailSet(UParticleSystem* template1, UParticleSystem* template2) {
+	TrailParticle1->SetTemplate(template1);
+	TrailParticle2->SetTemplate(template2);
+}
+void ABaseWeapon::PlaySwingAudio(USoundCue * sooundcue) {
+	if (sooundcue == nullptr) return;
+	SwingAudio->PlaySE();
 }
 void ABaseWeapon::SetDamageRate(float value) {
 	DamageRate = value;

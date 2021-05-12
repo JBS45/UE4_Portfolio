@@ -5,7 +5,9 @@
 #include "BaseMonster.h"
 #include "../Player/BaseCharacter.h"
 #include "../Collision/HitCollisionManager.h"
-#include "../Components/DamageInterface.h"
+#include "../Components/MyInterface.h"
+#include "Boss.h"
+#include "RockProjectile.h"
 #include "DrawDebugHelpers.h"
 
 
@@ -20,7 +22,6 @@ void UMonsterMeleeAttackUnit::NotifyBegin(USkeletalMeshComponent * MeshComp, UAn
 
 	Monster = Cast<ABaseMonster>(MeshComp->GetOwner());
 	if (IsValid(Monster)) {
-		Monster->PartOverlapOn(AttackEnablePart);
 		Monster->SetMeleeDamage(DamageRate, KnockBackDistance, DamageType, AttackEnablePart);
 	}
 
@@ -29,6 +30,11 @@ void UMonsterMeleeAttackUnit::NotifyBegin(USkeletalMeshComponent * MeshComp, UAn
 void UMonsterMeleeAttackUnit::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation, float FrameDeltaTime)
 {
 	Super::NotifyTick(MeshComp, Animation, FrameDeltaTime);
+
+	if (IsValid(Monster)) {
+
+		Monster->HitCheck(Monster->GetCollisionManager()->GetBoneNames(AttackEnablePart), DamageRate, KnockBackDistance, DamageType);
+	}
 	
 }
 void UMonsterMeleeAttackUnit::NotifyEnd(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation)
@@ -36,7 +42,40 @@ void UMonsterMeleeAttackUnit::NotifyEnd(USkeletalMeshComponent * MeshComp, UAnim
 	Super::NotifyEnd(MeshComp, Animation);
 	auto ControllingMonster = Cast<ABaseMonster>(MeshComp->GetOwner());
 	if (IsValid(ControllingMonster)) {
-		ControllingMonster->PartOverlapOff();
+
 	}
 }
 
+FString UMonsterThrowStone::GetNotifyName_Implementation() const
+{
+	return L"ThrowStone";
+}
+
+void UMonsterThrowStone::NotifyBegin(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation, float TotalDuration)
+{
+	Super::NotifyBegin(MeshComp, Animation, TotalDuration);
+
+	Monster = Cast<ABoss>(MeshComp->GetOwner());
+	if (IsValid(Monster)) {
+		Rock = Monster->SpawnProjectile();
+	}
+
+
+}
+void UMonsterThrowStone::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation, float FrameDeltaTime)
+{
+	Super::NotifyTick(MeshComp, Animation, FrameDeltaTime);
+
+	if (IsValid(Monster)) {
+		FVector Location = (MeshComp->GetSocketLocation("Muzzle_01") + MeshComp->GetSocketLocation("Muzzle_02")) / 2;
+		Rock->SetActorLocation(Location);
+	}
+
+}
+void UMonsterThrowStone::NotifyEnd(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation)
+{
+	Super::NotifyEnd(MeshComp, Animation);
+	if (IsValid(Monster)) {
+		Monster->ShootProjectile(Rock);
+	}
+}

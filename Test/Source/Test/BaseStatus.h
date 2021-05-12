@@ -219,6 +219,8 @@ struct FChainAction {
 	GENERATED_USTRUCT_BODY()
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		ECommandName AttackType;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		FString AttackName;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		ECommnadPriority Priority;
@@ -229,7 +231,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		UAnimMontage* ActionMontage;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		TArray<FString> EnableChainAction;
+		TArray<ECommandName> EnableChainAction;
 };
 USTRUCT(BlueprintType)
 struct FChainActionTable : public FTableRowBase

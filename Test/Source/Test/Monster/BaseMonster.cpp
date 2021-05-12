@@ -7,6 +7,12 @@
 #include "Components/CapsuleComponent.h"
 #include "../Collision/HitCollisionManager.h"
 #include "../Components/MonsterStatusManager.h"
+#include "../Components/SoundEffectComponent.h"
+#include "../Collision/DragonCollisionManager.h"
+#include "MonsterAnimInstance.h"
+#include "Perception/PawnSensingComponent.h"
+#include "PhysicsEngine/AggregateGeom.h"
+#include "PhysicsEngine/PhysicsAsset.h"
 #include "DrawDebugHelpers.h"
 
 // Sets default values
@@ -14,6 +20,32 @@ ABaseMonster::ABaseMonster()
 {
  	// Set this pawn to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
+
+	GetCapsuleComponent()->SetCollisionProfileName(TEXT("Monster"));
+
+	HitBox = CreateDefaultSubobject<UHitCollisionManager>(TEXT("HITBOX"));
+	Status = CreateDefaultSubobject<UMonsterStatusManager>(TEXT("STATUS"));
+
+	SoundEffectComp = CreateDefaultSubobject<USoundEffectComponent>(TEXT("SOUNDEFFECTCOMP"));
+	Detect = CreateDefaultSubobject<UPawnSensingComponent>(TEXT("Detect"));
+
+	PlayerDetectDistance = 2500.0f;
+	RoarRange = 3500.0f;
+
+	Detect->bHearNoises = false;
+	Detect->bOnlySensePlayers = true;
+	Detect->SightRadius = PlayerDetectDistance;
+	Detect->SensingInterval = 3.0f;
+	Detect->SetPeripheralVisionAngle(85.f);
+	Detect->OnSeePawn.AddDynamic(this, &ABaseMonster::OnSeePawn);
+
+	HitRadius = 100.0f;
+
+	CurrentState = EMonsterState::E_CREATE;
+
+	AIControllerClass = AMonsterAIController::StaticClass();
+	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
+
 	Tags.Add(MonsterTag);
 }
 
@@ -23,8 +55,8 @@ void ABaseMonster::BeginPlay()
 	Super::BeginPlay();
 
 	GetMesh()->SetCollisionProfileName("MonsterHitBox");
-	GetMesh()->OnComponentBeginOverlap.AddDynamic(this, &ABaseMonster::OnOverlapBegin);
 	TESTLOG(Warning, TEXT("Monster Begin"));
+
 }
 
 // Called every frame
@@ -46,98 +78,47 @@ void ABaseMonster::SetBrokenState(EMonsterPartsType brokenPart) {
 	{
 	case EMonsterPartsType::E_HEAD:
 		part = EMonsterBrokenParts::E_HEAD;
+		BrokenState = BrokenState | (int32)part;
 		break;
 	case EMonsterPartsType::E_BODY:
 		part = EMonsterBrokenParts::E_BODY;
+		BrokenState = BrokenState | (int32)part;
 		break;
 	case EMonsterPartsType::E_LEFTHAND:
 		part = EMonsterBrokenParts::E_LEFTHAND;
+		BrokenState = BrokenState | (int32)part;
 		break;
 	case EMonsterPartsType::E_RIGHTHAND:
 		part = EMonsterBrokenParts::E_RIGHTHAND;
+		BrokenState = BrokenState | (int32)part;
 		break;
 	case EMonsterPartsType::E_WING:
 		part = EMonsterBrokenParts::E_WING;
+		BrokenState = BrokenState | (int32)part;
 		break;
 	case EMonsterPartsType::E_LEFTLEG:
 		part = EMonsterBrokenParts::E_LEFTLEG;
+		BrokenState = BrokenState | (int32)part;
 		break;
 	case EMonsterPartsType::E_RIGHTLEG:
 		part = EMonsterBrokenParts::E_RIGHTLEG;
+		BrokenState = BrokenState | (int32)part;
 		break;
 	case EMonsterPartsType::E_TAIL:
 		part = EMonsterBrokenParts::E_TAIL;
+		BrokenState = BrokenState | (int32)part;
 		break;
 	}
-	BrokenState |= (int32)part;
 }
-
-ABaseCharacter* ABaseMonster::GetTarget() {
-	ABaseCharacter* result = nullptr;
-	auto targets = _Detect->GetTargets();
-	for (int i = 0; i < targets.Num(); ++i) {
-		if (Cast<ABaseCharacter>(targets[i])) {
-			result = Cast<ABaseCharacter>(targets[i]);
-			break;
-		}
+bool ABaseMonster::GetIsAlive() {
+	if (CurrentState != EMonsterState::E_DEAD) {
+		return true;
 	}
-	return result;
-}
-void ABaseMonster::GetDamageCapsules() {
-	auto TempArray = GetComponents();
-	TArray<UCapsuleComponent*> Capsules;
-	for (auto element : TempArray) {
-		if (Cast<UCapsuleComponent>(element) && element->ComponentTags.Num()>0) {
-			Capsules.Add(Cast<UCapsuleComponent>(element));
-			Cast<UCapsuleComponent>(element)->SetCollisionProfileName("MonsterDamage");
-			Cast<UCapsuleComponent>(element)->SetGenerateOverlapEvents(true);
-		}
-	}
-	SetDamageBox(Capsules);
-}
-void ABaseMonster::SetDamageBox(TArray<class UCapsuleComponent*> arr) {
-	for (auto element : arr) {
-
-		auto Type = element->ComponentTags[0];
-
-		if (Type.ToString() == "Head") {
-			//TESTLOG(Warning, TEXT("Head"));
-			DamageBox.Add(EMonsterPartsType::E_HEAD, element);
-		}
-		else if (Type.ToString() == "LeftHand") {
-			//TESTLOG(Warning, TEXT("LeftHand"));
-			DamageBox.Add(EMonsterPartsType::E_LEFTHAND, element);
-		}
-		else if (Type.ToString() == "RightHand") {
-			//TESTLOG(Warning, TEXT("RightHand"));
-			DamageBox.Add(EMonsterPartsType::E_RIGHTHAND, element);
-		}
-		else if(Type.ToString() == "Tail"){
-			//TESTLOG(Warning, TEXT("Tail"));
-			DamageBox.Add(EMonsterPartsType::E_TAIL, element);
-		}
-		else {
-			//TESTLOG(Warning, TEXT("Body"));
-			DamageBox.Add(EMonsterPartsType::E_BODY, element);
-		}
+	else {
+		return false;
 	}
 }
-void ABaseMonster::SetUpAnim(const FString DataRef) {
-	static ConstructorHelpers::FObjectFinder<UDataTable> DATATABLE(*DataRef);
-	if (DATATABLE.Succeeded()) {
-		auto DataTable = DATATABLE.Object;
-		auto Names = DataTable->GetRowNames();
-		for (auto name : Names) {
-			auto row = DataTable->FindRow<FMonsterAnim>(name, FString(TEXT("Init Monster data")));
-			AnimationMap.Add(row->Name, row->Animation);
-		}
-	}
-}
-
-float ABaseMonster::GetAggroChangeTerm() const {
-	return AggroChangeTerm; 
-}
-float ABaseMonster::GetAttackRange() const {
+float ABaseMonster::GetAttackRange() {
 	return AttackRange;
 }
 void ABaseMonster::SetActiveArea(class AMonsterArea* area) { 
@@ -155,9 +136,6 @@ FString ABaseMonster::GetMonsterName()const {
 uint8 ABaseMonster::GetMonsterID() const {
 	return MonsterID; 
 }
-TArray<APawn*> ABaseMonster::GetTargetList() { 
-	return _Detect->GetTargets(); 
-}
 EMonsterState ABaseMonster::GetMonsterState() { 
 	return CurrentState; 
 }
@@ -173,7 +151,18 @@ UMonsterAnimInstance* ABaseMonster::GetAnimInst() {
 float ABaseMonster::GetRoarRange() { 
 	return RoarRange; 
 }
-
+ABaseCharacter* ABaseMonster::GetTarget() {
+	return Target;
+}
+float ABaseMonster::GetDetectRange() {
+	return PlayerDetectDistance;
+}
+UPawnSensingComponent* ABaseMonster::GetPawnSensing() {
+	return Detect;
+}
+float ABaseMonster::GetDamage() const {
+	return Status->GetDamage();
+}
 void ABaseMonster::ApplyDamageFunc(const FHitResult& hit, const float AcitonDamageRate, const EDamageType DamageType, const float ImpactForce ) {
 	auto TargetActor = hit.Actor;
 
@@ -201,92 +190,72 @@ void ABaseMonster::TakeDamageFunc(bool& OutIsWeak, int32& OutFinalDamage, AActor
 
 }
 
-UAnimMontage* ABaseMonster::GetMontage(FString name) const {
-	UAnimMontage* result= AnimationMap[name];
-	return result;
-}
-void ABaseMonster::OnOverlapBegin(class UPrimitiveComponent* OverlappedComp, class AActor* OtherActor, class UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult) {
-	//if I use do once function I can Implement Attack
-	//Attack rate use Animation curve
-	if (IsAttack&&OtherActor->GetClass()->IsChildOf<ABaseCharacter>()) {
-		if (!DamagedCharacter.Contains(OtherActor)) {
-			
-			auto Bones = HitBox->GetHitBox()[AttackEnablePart];
-			auto Names = Bones->GetBones();
-			for (auto name : Names) {
-				HitCheck(name);
-			}
-		}
-	}
-}
-
-void ABaseMonster::HitCheck(FName Bone) {
-
-	float Radius = 120.0f;
-	FVector Location = GetMesh()->GetSocketLocation(Bone);
-	FQuat Rotation = GetMesh()->GetSocketQuaternion(Bone);
-
-	TArray<FHitResult> DetectResult;
-	FCollisionQueryParams params(NAME_None, false, this);
-	bool Result = GetWorld()->SweepMultiByProfile(
-		DetectResult,
-		Location,
-		Location,
-		Rotation,
-		TEXT("MonsterDamage"),
-		FCollisionShape::MakeSphere(Radius),
-		params);
-
-	DrawDebugSphere(GetWorld(), Location, Radius, 6, FColor::Red, false, 1.0f);
-
-
-
-	for (auto result : DetectResult) {
-		auto Player = Cast<ABaseCharacter>(result.Actor);
-		if (IsValid(Player)&& (!DamagedCharacter.Contains(Player)))
-		{
-			ApplyDamageFunc(result, DamageRate, AttackDamageType, KnockBackForce);
-			DamagedCharacter.Add(Player);
-		}
-
-	}
-}
-
 void ABaseMonster::ResetDamagedPlayer() {
 	DamagedCharacter.Empty();
 }
 
-void ABaseMonster::PartOverlapOn(EMonsterPartsType Parts) {
-	IsAttack = true;
-	
-	if (Parts == EMonsterPartsType::E_ALLBODY) {
-		for (auto box : DamageBox) {
-			box.Value->SetGenerateOverlapEvents(true);
-		}
-	}
-	else {
-		TArray<UCapsuleComponent*> Boxes;
-		DamageBox.MultiFind(Parts, Boxes);
-		for (auto box : Boxes){
-			box->SetGenerateOverlapEvents(true);
-		}
-	}
-	
-}
-void ABaseMonster::PartOverlapOff() {
-	for (auto box : DamageBox) {
-		box.Value->SetGenerateOverlapEvents(false);
-	}
-	ResetDamagedPlayer();
-}
-TArray<UCapsuleComponent*> ABaseMonster::GetDamageBox(EMonsterPartsType Parts) {
-	TArray<UCapsuleComponent*> result;
-	DamageBox.MultiFind(Parts, result);
-	return result;
-}
 void ABaseMonster::SetMeleeDamage(float damageRate, float force, EDamageType type, EMonsterPartsType EnablePart) {
 	DamageRate = damageRate;
 	KnockBackForce = force;
 	AttackDamageType = type;
 	AttackEnablePart = EnablePart;
+}
+
+void ABaseMonster::OnSeePawn(APawn *OtherPawn) {
+	if (OtherPawn != nullptr && CurrentState == EMonsterState::E_IDLE) {
+		auto temp= Cast<ABaseCharacter>(OtherPawn);
+		if (temp->GetState() != ECharacterState::E_DEAD) {
+			Target = temp;
+			MonsterController->SetTarget(Target);
+			MonsterController->ChangeMonsterState(EMonsterState::E_BATTLE);
+		}
+		else {
+			Target = nullptr;
+			MonsterController->SetTarget(Target);
+			MonsterController->ChangeMonsterState(EMonsterState::E_IDLE);
+		}
+	}
+}
+void ABaseMonster::HitCheck(USkeletalBodySetup* data,float damageRate,float knockbackDist, EDamageType damagetype) {
+
+		TArray<FHitResult> DetectResult;
+		FCollisionQueryParams Params(NAME_None, false, this);
+
+		TArray<AActor*> Ignore;
+		Ignore.Add(this);
+		
+		auto CollisionShape = data->AggGeom.SphylElems[0];
+		FVector Location =  CollisionShape.Center+ GetMesh()->GetSocketLocation(data->BoneName);
+
+		bool Result = GetWorld()->SweepMultiByProfile(
+			DetectResult,
+			Location,
+			Location,
+			CollisionShape.Rotation.Quaternion(),
+			TEXT("MonsterDamage"), FCollisionShape::MakeCapsule(CollisionShape.Radius*1.5f, (CollisionShape.Radius + CollisionShape.Length)*1.5f), Params
+		);
+			
+		DrawDebugCapsule(GetWorld(), Location, CollisionShape.Radius*1.5f, (CollisionShape.Radius + CollisionShape.Length)*1.5f, CollisionShape.Rotation.Quaternion(), FColor::Red, false, 0.5f);
+			/*UKismetSystemLibrary::CapsuleTraceMultiByProfile(GetWorld(), Location, Location, Scale* CollisionShape.Radius,
+			Scale*CollisionShape.Length, TEXT("MonsterDamage"), true, Ignore, EDrawDebugTrace::ForOneFrame, DetectResult, true, FLinearColor::Blue, FLinearColor::Green, 1.0f);*/
+
+
+		bool IsWeak = false;
+		int32 OutFinalDamage = 0;
+
+		TArray<AActor*> repeatedActor;
+
+		if (!Result) return;
+
+		TESTLOG(Warning, TEXT("test"));
+		for (auto DetectCharacter : DetectResult) {
+
+			auto Character = Cast<IDamageInterface>(DetectCharacter.Actor);
+
+			if (Character != nullptr && !repeatedActor.Contains(DetectCharacter.GetActor())) {
+				TESTLOG(Warning, TEXT("%s"), *(DetectCharacter.Actor->GetName()));
+				Character->TakeDamageFunc(IsWeak, OutFinalDamage, this, DetectCharacter, DamageRate*Status->GetDamage(), damagetype, knockbackDist);
+				repeatedActor.Add(DetectCharacter.GetActor());
+			}
+		}
 }

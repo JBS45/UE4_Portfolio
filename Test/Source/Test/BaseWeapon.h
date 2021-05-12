@@ -11,6 +11,9 @@
 class USkeletalMeshComponent;
 class UBoxComponent;
 class UParticleSystemComponent;
+class UAudioComponent;
+class USoundCue;
+class USoundEffectComponent;
 
 UCLASS()
 class TEST_API ABaseWeapon : public AActor
@@ -34,14 +37,22 @@ public:
 
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mesh", meta = (AllowPrivateAccess = "true"))
-	class USkeletalMeshComponent* Mesh;
+		USkeletalMeshComponent* Mesh;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collision", meta = (AllowPrivateAccess = "true"))
-	class UBoxComponent* Collision;
+		UBoxComponent* Collision;
 
 	UPROPERTY(VisibleAnywhere,  Category = "Trail", meta = (AllowPrivateAccess = "true"))
-		class UParticleSystemComponent* TrailParticle;
-	UPROPERTY(VisibleAnywhere,  Category = "Trail", meta = (AllowPrivateAccess = "true"))
-		TSubclassOf<UParticleSystem> TrailTemplate;
+		UParticleSystemComponent* TrailParticle1;
+	UPROPERTY(VisibleAnywhere, Category = "Trail", meta = (AllowPrivateAccess = "true"))
+		UParticleSystemComponent* TrailParticle2;
+	UPROPERTY(VisibleAnywhere, Category = "Trail", meta = (AllowPrivateAccess = "true"))
+		float TrailValue = 1.0f;
+
+	UPROPERTY(VisibleAnywhere, Category = "Sound", meta = (AllowPrivateAccess = "true"))
+		USoundEffectComponent* SwingAudio;
+	UPROPERTY(VisibleAnywhere, Category = "Sound", meta = (AllowPrivateAccess = "true"))
+		USoundEffectComponent* HitAudio;
+
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Status", meta = (AllowPrivateAccess = "true"))
 	FBaseStatus Status;
@@ -58,8 +69,11 @@ public:
 	void SetOverlapEvent(bool IsOn);
 	void SetDamageRate(float value);
 
-	void TrailOn(ETrailWidthMode type,float value);
+	void TrailOn();
 	void TrailOff();
+	void TrailSet(UParticleSystem* template1, UParticleSystem* template2);
+
+	void PlaySwingAudio(USoundCue * sooundcue);
 private:
 	FVector CurrentBoxSize;
 	FVector CurrentBoxLocation;

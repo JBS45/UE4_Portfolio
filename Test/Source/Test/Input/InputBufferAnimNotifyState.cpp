@@ -26,7 +26,12 @@ void UInputBufferAnimNotifyState::NotifyBegin(USkeletalMeshComponent * MeshComp,
 
 	auto buffer = GetInputBuffer(MeshComp);
 	if (IsValid(buffer)) {
-		buffer->InputBufferOpen();
+		if (IsOpen) {
+			buffer->InputBufferOpen();
+		}
+		else {
+			buffer->InputBufferClose();
+		}
 	}
 }
 
@@ -41,8 +46,29 @@ void UInputBufferAnimNotifyState::NotifyEnd(USkeletalMeshComponent * MeshComp, U
 	
 	auto buffer = GetInputBuffer(MeshComp);
 	if (IsValid(buffer)) {
-		buffer->InputBufferClose();
+		if (IsOpen) {
+			buffer->InputBufferClose();
+			buffer->InputBufferChecker();
+		}
+		else {
+			buffer->InputBufferOpen();
+		}
 	}
+}
+
+
+FString UInputBufferOpen::GetNotifyName_Implementation() const {
+	return L"InputBufferOpen";
+}
+void UInputBufferOpen::Notify(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation)
+{
+	Super::Notify(MeshComp, Animation);
+
+	auto buffer = GetInputBuffer(MeshComp);
+	if (IsValid(buffer)) {
+		buffer->InputBufferOpen();
+	}
+
 }
 
 FString UInputBufferClose::GetNotifyName_Implementation() const {
@@ -59,19 +85,6 @@ void UInputBufferClose::Notify(USkeletalMeshComponent * MeshComp, UAnimSequenceB
 	
 }
 
-FString UAnimChainReset::GetNotifyName_Implementation() const {
-	return L"ChainReset";
-}
-void UAnimChainReset::Notify(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation)
-{
-	Super::Notify(MeshComp, Animation);
-	
-	auto buffer = GetInputBuffer(MeshComp);
-	if (IsValid(buffer)) {
-		buffer->ChainReset();
-	}
-	
-}
 
 FString UDrawWeapon::GetNotifyName_Implementation() const {
 	return L"GoToBattle";
@@ -86,7 +99,7 @@ void UDrawWeapon::Notify(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * 
 		PlayerCharater->DrawWeapon();
 		auto PlayerController = Cast<ABasePlayerController>(PlayerCharater->Controller);
 		if (IsValid(PlayerController)) {
-			PlayerController->ChangeCharacterState(ECharacterState::E_BATTLE);
+			PlayerController->ChangeStateDel.Broadcast(ECharacterState::E_BATTLE);
 		}
 	}
 }
@@ -104,8 +117,9 @@ void UPutUpWeapon::Notify(USkeletalMeshComponent * MeshComp, UAnimSequenceBase *
 		PlayerCharater->PutUpWeapon();
 		auto PlayerController = Cast<ABasePlayerController>(PlayerCharater->Controller);
 		if (IsValid(PlayerController)) {
-			PlayerController->ChangeCharacterState(ECharacterState::E_IDLE);
+			PlayerController->ChangeStateDel.Broadcast(ECharacterState::E_IDLE);
 		}
 	}
 	
 }
+

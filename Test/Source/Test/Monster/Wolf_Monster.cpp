@@ -43,25 +43,12 @@ AWolf_Monster::AWolf_Monster() {
 	GetCharacterMovement()->MaxAcceleration = RunSpeed;
 	GetCharacterMovement()->MaxWalkSpeed = BasicSpeed;
 
-	//HitBox = CreateDefaultSubobject<UWolfCollisionManager>(TEXT("HITBOX"));
-	//HitBox->SetUpAttachSocket(GetMesh());
-	//HitBox->SetUpCollisionType(FName(TEXT("MonsterHitBox")), ECollisionChannel::ECC_GameTraceChannel4);
-
-/*	DamageBox = CreateDefaultSubobject<UWolfCollisionManager>(TEXT("DAMAGEBOX"));
-	DamageBox->SetUpAttachSocket(GetMesh());
-	DamageBox->SetUpCollisionType(FName(TEXT("MonsterDamage")), ECollisionChannel::ECC_GameTraceChannel6);
-	*/
 	//Todo : MonsterStatus Load DataTable;
-
-	_Detect = CreateDefaultSubobject<UDetectComponent>(TEXT("DETECTMANAGER"));
-	_Detect->SetDetectRange(DetectRange, EDetectCollisionType::E_PLAYER);
-	_Detect->GetDetect()->SetupAttachment(GetCapsuleComponent());
 
 	AIControllerClass = AMonsterAIController::StaticClass();
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 
 	AttackRange = 200;
-	AggroChangeTerm = 15.0f;
 
 	BasicSpeed = 200.0f;
 	RunSpeed = 800.0f;

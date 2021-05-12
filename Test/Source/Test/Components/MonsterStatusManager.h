@@ -13,6 +13,8 @@ class TEST_API UMonsterStatusManager : public UActorComponent
 {
 	GENERATED_BODY()
 
+public:
+	#define HPPERCENT(percent) (MaxHP/100)*percent
 public:	
 	// Sets default values for this component's properties
 	UMonsterStatusManager();
@@ -43,5 +45,6 @@ public:
 	void SetStatus(float maxHp, float baseDamage);
 	void SetBrokenState(EMonsterBrokenParts broken);
 	void TakeDamage(const int32 acculateDamage);
+	void ChangePhase();
 	float GetDamage();
 };

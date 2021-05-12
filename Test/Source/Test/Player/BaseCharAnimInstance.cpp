@@ -3,6 +3,7 @@
 
 #include "BaseCharAnimInstance.h"
 #include "BaseCharacter.h"
+#include "../Components/CharacterIKComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 
@@ -13,16 +14,27 @@ UBaseCharAnimInstance::UBaseCharAnimInstance() {
 	IsDead = false;
 	CharSpeed = 0.0f;
 
-
-	static ConstructorHelpers::FObjectFinder<UAnimMontage> EvadeAnim(TEXT("AnimMontage'/Game/Blueprints/Animations/Dual/Evade.Evade'"));
-	if (EvadeAnim.Succeeded())
-	{
-		Evade = EvadeAnim.Object;
-	}
-	static ConstructorHelpers::FObjectFinder<UAnimMontage> KnockBackAnim(TEXT("AnimMontage'/Game/Blueprints/Animations/Dual/KnockBack.KnockBack'"));
-	if (EvadeAnim.Succeeded())
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> KnockBackAnim(TEXT("AnimMontage'/Game/Blueprints/Animations/KnockBack.KnockBack'"));
+	if (KnockBackAnim.Succeeded())
 	{
 		KnockBack = KnockBackAnim.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> STUNGETUP(TEXT("AnimMontage'/Game/Blueprints/Animations/KnockDownGetupMontage.KnockDownGetupMontage'"));
+	if (STUNGETUP.Succeeded())
+	{
+		StunGetUp = STUNGETUP.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> GETUP(TEXT("AnimMontage'/Game/Blueprints/Animations/Dual/GetUp.GetUp'"));
+	if (GETUP.Succeeded())
+	{
+		GetUp = GETUP.Object;
+	}
+	static ConstructorHelpers::FObjectFinder<UAnimMontage> HITROAR(TEXT("AnimMontage'/Game/Blueprints/Animations/HitRoarMontage.HitRoarMontage'"));
+	if (HITROAR.Succeeded())
+	{
+		HitRoar = HITROAR.Object;
 	}
 
 }
@@ -37,17 +49,35 @@ void UBaseCharAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 
 		if (Character) {
 			CurrentWeapon = Character->GetWeaponState();
+
+			LeftFootRotation = Character->GetIK()->GetLeftRotation();
+			RightFootRotation = Character->GetIK()->GetRIghtRotation();
+			LeftFootIKValue = Character->GetIK()->GetLeftIKValue();
+			RightFootIKValue = Character->GetIK()->GetRightIKValue();
+			HipOffset = Character->GetIK() ->GetHipOffset();
 		}
 	}
-	
+	CheckMontagePlaying();
 }
-void UBaseCharAnimInstance::PlayEvade()
-{
-	Montage_Play(Evade, 1.0f);
-}
+
 void UBaseCharAnimInstance::PlayKnockBack()
 {
-	Montage_Play(KnockBack, 1.0f);
+	PlayAnimMontage(KnockBack);
+}
+void UBaseCharAnimInstance::PlayHitRoar()
+{
+	PlayAnimMontage(HitRoar);
+}
+
+void UBaseCharAnimInstance::PlayGetUp() {
+	auto Pawn = Cast<ABaseCharacter>(TryGetPawnOwner());
+	/*if (Pawn->GetIsStun()) {
+		PlayAnimMontage(StunGetUp);
+	}
+	else {
+		PlayAnimMontage(GetUp);
+	}*/
+	PlayAnimMontage(GetUp);
 }
 void UBaseCharAnimInstance::ExchangeWeapon(EWeaponType type) {
 	if (CurrentWeapon == type) return;
@@ -55,8 +85,10 @@ void UBaseCharAnimInstance::ExchangeWeapon(EWeaponType type) {
 	CurrentWeapon = type;
 	TESTLOG(Warning, TEXT("Change Weapon : %d"),(int32)CurrentWeapon);
 }
+
 void UBaseCharAnimInstance::PlayAnimMontage(UAnimMontage* montage) {
 	if (montage!=nullptr) {
+		IsPlayingMontageAnim = true;
 		TESTLOG(Warning, TEXT("%s"),*(montage->GetName()));
 		Montage_Play(montage, 1.0f);
 	}
@@ -101,4 +133,16 @@ float UBaseCharAnimInstance::MakeCharSpeed(APawn* pawn) {
 	VelocityXY.Normalize();
 	VelocityXY *= Dist;
 	return VelocityXY.Size();
+}
+
+void UBaseCharAnimInstance::CheckMontagePlaying() {
+	if (IsPlayingMontageAnim) {
+		if (!IsAnyMontagePlaying())
+		{
+			IsPlayingMontageAnim = false;
+
+			//Have a Problem
+			ChainResetDel.Execute();
+		}
+	}
 }

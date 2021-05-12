@@ -3,12 +3,14 @@
 #pragma once
 
 #include "../Test.h"
+#include"../BaseEnum.h"
 #include "Animation/AnimInstance.h"
 #include "MonsterAnimInstance.generated.h"
 
 /**
  * 
  */
+
 UCLASS()
 class TEST_API UMonsterAnimInstance : public UAnimInstance
 {
@@ -17,19 +19,24 @@ public:
 	UMonsterAnimInstance();
 	virtual void NativeUpdateAnimation(float DeltaSeconds) override;
 private:
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+		EMonsterState CurrentState;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 		bool IsAlive = true;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-		bool IsFly;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+		bool IsStun;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 		bool IsBattle;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 		float CharSpeed;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-		float RightRotate = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+		float YawDir = 0;
+	
 public:
 	void MonsterDead() { IsAlive = false; }
-	void SetIsFly(bool isfly) { IsFly = isfly; }
-	void SetRightRotate(float value) { RightRotate = value;}
+	void SetRightRotate(float value) { YawDir = value;}
 	void PlayAnimation(UAnimMontage* montage, float rate);
-};
+	void PlayDown();
+	void PlayGetUp();
+	void ChangeMonsterState(EMonsterState state);
+}; 

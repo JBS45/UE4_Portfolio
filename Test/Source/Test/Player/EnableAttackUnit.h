@@ -11,20 +11,18 @@
 /**
  * 
  */
+
+class USoundCue;
+
 UENUM(BlueprintType)
 enum class EHandDamageRate : uint8 {
 	E_LEFT = 0 UMETA(DisplayName = "LEFT"),
 	E_RIGHT = 1 UMETA(DisplayName = "RIGHT")
 };
-UENUM(BlueprintType)
-enum class ETrailModeSelect : uint8 {
-	E_CENTER = 0 UMETA(DisplayName = "CENTER"),
-	E_FIRST = 1 UMETA(DisplayName = "FIRST"),
-	E_SECOND = 2 UMETA(DisplayName = "SECOND"),
-};
+
 
 UCLASS()
-class TEST_API UEnableAttackUnit : public UAnimNotifyState
+class TEST_API UEnableLeftAttackUnit : public UAnimNotifyState
 {
 	GENERATED_BODY()
 public:
@@ -35,13 +33,27 @@ private:
 	virtual void NotifyEnd(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation) override;
 private:
 	UPROPERTY(EditAnywhere, Category = "Damage", meta = (AllowPrivateAccess = "true"))
-		EHandDamageRate WeaponHand;
+		float DamageRate = 1.0f;
+
+
+
+
+};
+UCLASS()
+class TEST_API UEnableRightAttackUnit : public UAnimNotifyState
+{
+	GENERATED_BODY()
+public:
+	virtual FString GetNotifyName_Implementation() const override;
+private:
+	virtual void NotifyBegin(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation, float TotalDuration) override;
+	virtual void NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation, float FrameDeltaTime) override;
+	virtual void NotifyEnd(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation) override;
+private:
 	UPROPERTY(EditAnywhere, Category = "Damage", meta = (AllowPrivateAccess = "true"))
 		float DamageRate = 1.0f;
-	UPROPERTY(EditAnywhere, Category = "Trail", meta = (AllowPrivateAccess = "true"))
-		ETrailModeSelect Type;
-	UPROPERTY(EditAnywhere, Category = "Trail", meta = (AllowPrivateAccess = "true"))
-		float Value = 1.0f;
+
+
 };
 
 UCLASS()
@@ -84,4 +96,44 @@ private:
 		FName CurrentSection;
 	UPROPERTY(EditAnywhere, Category = "NextSection", meta = (AllowPrivateAccess = "true"))
 		FName NextSection;
+};
+
+UCLASS()
+class TEST_API URollBackPreState : public UAnimNotify
+{
+	GENERATED_BODY()
+
+public:
+	virtual FString GetNotifyName_Implementation() const override;
+private:
+	virtual void Notify(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation) override;
+};
+
+UCLASS()
+class TEST_API UCastSpecial: public UAnimNotify
+{
+	GENERATED_BODY()
+
+public:
+	virtual FString GetNotifyName_Implementation() const override;
+private:
+	virtual void Notify(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation) override;
+
+};
+
+UCLASS()
+class TEST_API UPlaySound : public UAnimNotify
+{
+	GENERATED_BODY()
+
+public:
+	virtual FString GetNotifyName_Implementation() const override;
+private:
+	virtual void Notify(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation) override;
+private:
+	UPROPERTY(EditAnywhere, Category = "Hand", meta = (AllowPrivateAccess = "true"))
+		EHandDamageRate WeaponHand;
+	UPROPERTY(EditAnywhere, Category = "Sound", meta = (AllowPrivateAccess = "true"))
+		USoundCue* SwingSound;
+
 };

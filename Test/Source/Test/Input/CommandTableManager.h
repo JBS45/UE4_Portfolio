@@ -6,6 +6,7 @@
 #include "../BaseEnum.h"
 #include "../BaseStatus.h"
 #include "Components/ActorComponent.h"
+#include "../Components/MyInterface.h"
 #include "CommandTableManager.generated.h"
 
 
@@ -24,26 +25,28 @@ public:
 protected:
 	// Called when the game starts
 	virtual void BeginPlay() override;
-public:
-	FVoidDelegateChain NewActionChainDel;
+
 private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State", meta = (AllowPrivateAccess = "true"))
 		EWeaponType CurrentWeapon;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "State", meta = (AllowPrivateAccess = "true"))
-		FString CurrentCommandName;
+		ECommandName CurrentCommandName;
 private:
-	TMap<EWeaponType, TMap<FString, FChainAction>> TotalCommands;
-	TMap<FString, FChainAction>* CurrentCommands;
-	TArray<FString> EnableAction;
+	TMap<EWeaponType, TMap<ECommandName, FChainAction>> TotalCommands;
+	TMap<ECommandName, FChainAction>* CurrentCommands;
+	TArray<ECommandName> EnableAction;
+	TArray<IChainInterface*> ChainObservers;
 private:
+	bool IsSpecial = false;
 	void LoadCommandTable(FString ref);
-	UAnimMontage* FindAnmation(FString actionName);
-
+	UAnimMontage* FindAnmation(ECommandName actionName);
+	void Notify(ECommandName currentActionName);
 public:
 	FORCEINLINE bool ValidCurrentCommandName() const;
-	FORCEINLINE FChainAction FindAction(FString actionName);
-	void SetCurrentCommandName(FString commandName);
-	TArray<FString> FindEnableAction(FString currentActionName);
+	FORCEINLINE void SetSpecial(bool IsOn);
+	FORCEINLINE FChainAction FindAction(ECommandName actionName);
+	void SetCurrentCommandName(ECommandName commandName);
+	TArray<ECommandName> FindEnableAction(ECommandName currentActionName);
 	void ChangeCommandTable(EWeaponType weapon);
-
+	void Attach(IChainInterface* newObserver);
 };

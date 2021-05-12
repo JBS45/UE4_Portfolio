@@ -5,57 +5,76 @@
 #include "../BaseWeapon.h"
 #include "BaseCharacter.h"
 #include "BasePlayerController.h"
+#include "Sound/SoundCue.h"
+#include "Kismet/GameplayStatics.h"
 
-FString UEnableAttackUnit::GetNotifyName_Implementation() const {
-	return L"Attack Enable";
+FString UEnableLeftAttackUnit::GetNotifyName_Implementation() const {
+	return L"Left Attack Enable";
 }
 
-void UEnableAttackUnit::NotifyBegin(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation, float TotalDuration)
+void UEnableLeftAttackUnit::NotifyBegin(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation, float TotalDuration)
 {
 	Super::NotifyBegin(MeshComp, Animation, TotalDuration);
 
 	auto PlayerCharater = Cast<ABaseCharacter>(MeshComp->GetOwner());
 	if (IsValid(PlayerCharater)) {
-		switch (WeaponHand) {
-			case EHandDamageRate::E_LEFT:
-				PlayerCharater->WeaponLeftOverlapOn();
-				PlayerCharater->GetLeftHand()->SetDamageRate(DamageRate);
-				PlayerCharater->GetLeftHand()->TrailOn((ETrailWidthMode)Type, Value);
-				break;
-			case EHandDamageRate::E_RIGHT:
-				PlayerCharater->WeaponRightOverlapOn();
-				PlayerCharater->GetRightHand()->SetDamageRate(DamageRate);
-				PlayerCharater->GetRightHand()->TrailOn((ETrailWidthMode)Type, Value);
-				break;
-		}
+		PlayerCharater->WeaponLeftOverlapOn();
+		PlayerCharater->GetLeftHand()->SetDamageRate(DamageRate);
+		PlayerCharater->GetLeftHand()->TrailOn();
 	}
 
 }
 
-void UEnableAttackUnit::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation, float FrameDeltaTime)
+void UEnableLeftAttackUnit::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation, float FrameDeltaTime)
 {
 	Super::NotifyTick(MeshComp, Animation, FrameDeltaTime);
 }
 
-void UEnableAttackUnit::NotifyEnd(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation)
+void UEnableLeftAttackUnit::NotifyEnd(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation)
 {
 	Super::NotifyEnd(MeshComp, Animation);
 
 	auto PlayerCharater = Cast<ABaseCharacter>(MeshComp->GetOwner());
 	if (IsValid(PlayerCharater)) {
-		switch (WeaponHand) {
-		case EHandDamageRate::E_LEFT:
-			PlayerCharater->WeaponLeftOverlapOff();
-			PlayerCharater->GetLeftHand()->TrailOff();
-			break;
-		case EHandDamageRate::E_RIGHT:
-			PlayerCharater->WeaponRightOverlapOff();
-			PlayerCharater->GetRightHand()->TrailOff();
-			break;
-		}
+		PlayerCharater->WeaponLeftOverlapOff();
+		PlayerCharater->GetLeftHand()->TrailOff();
+			
 	}
 }
 
+
+FString UEnableRightAttackUnit::GetNotifyName_Implementation() const {
+	return L"Right Attack Enable";
+}
+
+void UEnableRightAttackUnit::NotifyBegin(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation, float TotalDuration)
+{
+	Super::NotifyBegin(MeshComp, Animation, TotalDuration);
+
+	auto PlayerCharater = Cast<ABaseCharacter>(MeshComp->GetOwner());
+	if (IsValid(PlayerCharater)) {
+			PlayerCharater->WeaponRightOverlapOn();
+			PlayerCharater->GetRightHand()->SetDamageRate(DamageRate);
+			PlayerCharater->GetRightHand()->TrailOn();
+	}
+
+}
+
+void UEnableRightAttackUnit::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation, float FrameDeltaTime)
+{
+	Super::NotifyTick(MeshComp, Animation, FrameDeltaTime);
+}
+
+void UEnableRightAttackUnit::NotifyEnd(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation)
+{
+	Super::NotifyEnd(MeshComp, Animation);
+
+	auto PlayerCharater = Cast<ABaseCharacter>(MeshComp->GetOwner());
+	if (IsValid(PlayerCharater)) {
+		PlayerCharater->WeaponRightOverlapOff();
+		PlayerCharater->GetRightHand()->TrailOff();
+	}
+}
 
 
 FString UEvadeActionUnit::GetNotifyName_Implementation() const {
@@ -68,7 +87,7 @@ void UEvadeActionUnit::NotifyBegin(USkeletalMeshComponent * MeshComp, UAnimSeque
 
 	auto PlayerCharater = Cast<ABaseCharacter>(MeshComp->GetOwner());
 	if (IsValid(PlayerCharater)) {
-		PlayerCharater->GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		PlayerCharater->SetEvade(true);
 	}
 
 }
@@ -84,7 +103,10 @@ void UEvadeActionUnit::NotifyEnd(USkeletalMeshComponent * MeshComp, UAnimSequenc
 
 	auto PlayerCharater = Cast<ABaseCharacter>(MeshComp->GetOwner());
 	if (IsValid(PlayerCharater)) {
+		UGameplayStatics::SetGlobalTimeDilation(PlayerCharater->GetWorld(), 1.0);
+		PlayerCharater->SetEvade(false);
 		PlayerCharater->GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		PlayerCharater->CustomTimeDilation = 1.0f;
 	}
 }
 
@@ -112,6 +134,58 @@ void UCheckInAir::Notify(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * 
 	if (IsValid(Player)) {
 		if (!Player->GetCharacterMovement()->IsFalling()) {
 			Player->GetAnimInst()->Montage_SetNextSection(CurrentSection, NextSection);
+		}
+	}
+}
+
+FString URollBackPreState::GetNotifyName_Implementation() const
+{
+	return L"PreState";
+}
+void URollBackPreState::Notify(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation)
+{
+	Super::Notify(MeshComp, Animation);
+	auto Player = Cast<ABaseCharacter>(MeshComp->GetOwner());
+	if (IsValid(Player)) {
+		auto Controller = Cast<ABasePlayerController>(Player->GetController());
+		if (IsValid(Controller)) {
+			Controller->ChangeStateDel.Broadcast(Controller->GetPreState());
+		}
+	}
+}
+
+FString UCastSpecial::GetNotifyName_Implementation() const
+{
+	return L"CastingSpecial";
+}
+void UCastSpecial::Notify(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation)
+{
+	Super::Notify(MeshComp, Animation);
+	auto Player = Cast<ABaseCharacter>(MeshComp->GetOwner());
+	if (IsValid(Player)) {
+		auto Controller = Cast<ABasePlayerController>(Player->GetController());
+		if (IsValid(Controller)) {
+			Controller->SpecialOn();
+		}
+	}
+}
+FString UPlaySound::GetNotifyName_Implementation() const
+{
+	return L"Play Sound";
+}
+void UPlaySound::Notify(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation)
+{
+	Super::Notify(MeshComp, Animation);
+
+	auto PlayerCharater = Cast<ABaseCharacter>(MeshComp->GetOwner());
+	if (IsValid(PlayerCharater)) {
+		switch (WeaponHand) {
+		case EHandDamageRate::E_LEFT:
+			PlayerCharater->GetLeftHand()->PlaySwingAudio(SwingSound);
+			break;
+		case EHandDamageRate::E_RIGHT:
+			PlayerCharater->GetRightHand()->PlaySwingAudio(SwingSound);
+			break;
 		}
 	}
 }

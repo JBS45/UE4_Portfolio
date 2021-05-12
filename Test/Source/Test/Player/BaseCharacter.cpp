@@ -13,6 +13,10 @@
 #include "DrawDebugHelpers.h"
 #include "../Input/InputBufferManager.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "../Components/CharacterIKComponent.h"
+#include "../Components/CharacterBlockComponent.h"
+#include "../Components/SoundEffectComponent.h"
+#include "../Input/CommandTableManager.h"
 
 // Sets default values
 ABaseCharacter::ABaseCharacter()
@@ -34,9 +38,9 @@ ABaseCharacter::ABaseCharacter()
 
 	/*Mesh*/
 	GetMesh()->SetRelativeLocationAndRotation(FVector(0.0f, 0.0f, -88.0f), FRotator(0.0f, -90.0f, 0.0f));
-	CurrentSpringArmLength = 400.0f;
-	WheelSpeed = 25.0f;
 	SpringArm->TargetArmLength = CurrentSpringArmLength;
+	SpringArm->bEnableCameraLag = true;
+	SpringArm->CameraLagSpeed = CameraSpeed;
 	BaseCameraVector = FVector(0.0f, 0.0f, 20.0f);
 	BaseCameraRotator = FRotator(-15.0f, 0.0f, 0.0f);
 	SpringArm->SetRelativeLocation(BaseCameraVector);
@@ -62,6 +66,15 @@ ABaseCharacter::ABaseCharacter()
 
 	GetMesh()->SetAnimationMode(EAnimationMode::AnimationBlueprint);
 
+	MaterialMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("MaterailMesh"));
+	MaterialMesh->SetupAttachment(GetMesh());
+	MaterialMesh->SetSkeletalMesh(SK_MESH.Object);
+	MaterialMesh->SetVisibility(false);
+	MaterialMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	MaterialMesh->SetRelativeLocationAndRotation(FVector::ZeroVector, FQuat::Identity);
+	MaterialMesh->SetMasterPoseComponent(GetMesh());
+	MaterialMesh->SetHiddenInGame(true);
+
 	/*Mesh */
 	static ConstructorHelpers::FClassFinder<UAnimInstance>MESH_ANIM(TEXT("AnimBlueprint'/Game/Blueprints/Anim/Player/DualAnimaitonBP.DualAnimaitonBP_C'"));
 	if (MESH_ANIM.Succeeded()) {
@@ -73,6 +86,9 @@ ABaseCharacter::ABaseCharacter()
 		TempMesh = WEAPON_MESH.Object;
 	}
 	
+	LockOnDetect = CreateDefaultSubobject<UDetectComponent>(TEXT("LOCKONDETECT"));
+
+
 	CurrentState = ECharacterState::E_NONE;
 
 	StatusManager = CreateDefaultSubobject<UCharacterStatusManager>(TEXT("STATUSMANAGER"));
@@ -83,17 +99,14 @@ ABaseCharacter::ABaseCharacter()
 	GetMesh()->SetGenerateOverlapEvents(true);
 	GetMesh()->CanCharacterStepUpOn = ECanBeCharacterBase::ECB_No;
 
-	
-	CollisionManager = CreateDefaultSubobject<UHumanCollisionManager>(TEXT("COLLISIONMANAGER"));
-	CollisionManager->SetUpCharacterStatusManager(this);
-	CollisionManager->InitHitBox(nullptr,GetMesh());
+	IKComp = CreateDefaultSubobject<UCharacterIKComponent>(TEXT("IKCOMP"));
 
-	Detect = CreateDefaultSubobject<UDetectComponent>(TEXT("DETECTMANAGER"));
-	Detect->SetDetectRange(DetectRange, EDetectCollisionType::E_MONSTER);
-	Detect->GetDetect()-> SetupAttachment(GetCapsuleComponent());
 
+	BlockComp = CreateDefaultSubobject<UCharacterBlockComponent>(TEXT("BLOCKCOMP"));
+	SoundEffectComp = CreateDefaultSubobject<USoundEffectComponent>(TEXT("SOUNDEFFECTCOMP"));
 
 	PostProcessMat = CreateDefaultSubobject<UPostProcessComponent>(TEXT("POSTPROCESS"));
+
 
 	WeaponType = EWeaponType::E_NOWEAPON;
 
@@ -105,25 +118,19 @@ ABaseCharacter::ABaseCharacter()
 void ABaseCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	//TESTLOG_S(Warning);
-	//TESTLOG(Warning, TEXT("Actor Name : %s, Location X : %.3f"), *GetName(), GetActorLocation().X);
-
-	AnimInst = Cast<UBaseCharAnimInstance>(GetMesh()->GetAnimInstance());
 
 	auto playerController = Cast<ABasePlayerController>(Controller);
+	if (IsValid(playerController)) {
+		SetInitWeapon();
+		playerController->PlayCharacter();
+	}
+}
+void ABaseCharacter::PossessedBy(AController * NewController) {
+	AnimInst = Cast<UBaseCharAnimInstance>(GetMesh()->GetAnimInstance());
 
-	playerController->ChangeStateDel.AddUObject(AnimInst, &UBaseCharAnimInstance::CharacterChangeState);
-	playerController->ChangeWeaponDel.AddUObject(AnimInst, &UBaseCharAnimInstance::ChangeWeapon);
-	playerController->GetInputBuffer()->PlayAnimEventDel.BindUObject(AnimInst, &UBaseCharAnimInstance::PlayAnimMontage);
+	auto playerController = Cast<ABasePlayerController>(NewController);
 
-	playerController->ChangeStateDel.Broadcast(ECharacterState::E_IDLE);
-	playerController->ChangeWeaponDel.Broadcast(EWeaponType::E_DUAL);
-
-
-
-	GetMesh()->OnComponentBeginOverlap.AddDynamic(this, &ABaseCharacter::OnOverlapBegin);
-	GetMesh()->OnComponentEndOverlap.AddDynamic(this, &ABaseCharacter::OnOverlapEnd);
-
+	playerController->PossessInit(this);
 }
 
 void ABaseCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -142,13 +149,24 @@ void ABaseCharacter::PostInitializeComponents()
 void ABaseCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-	Detect->DrawDebug(this, DeltaTime);
 	auto control = Cast<ABasePlayerController>(GetController());
 	control->CameraLockOn(DeltaTime);
 
-	if (IsBlock) {
-		Blocking(DeltaTime);
+	if (IsSprint) {
+		StatusManager->ConsumeStamina(StatusManager->GetConsumeSprint(), DeltaTime);
 	}
+	if (Effects.Num() > 0) {
+		for (int i = 0; i < Effects.Num();) {
+			if (Effects[i]->GetIdentifier() == EEffectType::E_INVALID) {
+				Effects.RemoveAt(i);
+			}
+			else {
+				Effects[i]->TickEffect(DeltaTime);
+				++i;
+			}
+		}
+	}
+
 }
 
 // Called to bind functionality to input
@@ -182,17 +200,6 @@ void ABaseCharacter::CameraLockUp(float NewAxisValue) {
 void ABaseCharacter::CameraTurn(float NewAxisValue) {
 	AddControllerYawInput(NewAxisValue);
 }
-void ABaseCharacter::Evade()
-{
-	if (StatusManager->UseStamina()) {
-		AnimInst->PlayEvade();
-	}
-}
-void ABaseCharacter::CameraZoom(float NewAxisValue) {
-	CurrentSpringArmLength += WheelSpeed * NewAxisValue;
-	float Dest = FMath::Clamp(CurrentSpringArmLength, MinCameraDistance, MaxCameraDistance);
-	SpringArm->TargetArmLength = FMath::FInterpTo(SpringArm->TargetArmLength, Dest, GetWorld()->DeltaTimeSeconds, 10);
-}
 
 
 
@@ -220,9 +227,6 @@ void ABaseCharacter::ChangeWeapon(EWeaponType type) {
 			break;
 	}
 
-}
-TArray<APawn*> ABaseCharacter::GetTargetMonster() { 
-	return Detect->GetTargets(); 
 }
 
 void ABaseCharacter::SetInitWeapon() {
@@ -315,12 +319,20 @@ void ABaseCharacter::ApplyDamageFunc(const FHitResult& hit, const float AcitonDa
 
 }
 void ABaseCharacter::TakeDamageFunc(bool& OutIsWeak, int32& OutFinalDamage, AActor* Causer,const FHitResult& hit, const float CaculateDamage, const EDamageType DamageType, const float ImpactForce) {
+
+	if (IsEvade) {
+		UGameplayStatics::SetGlobalTimeDilation(GetWorld(), 0.7);
+		//CustomTimeDilation = 1.2f;
+		GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
 	TESTLOG(Warning, TEXT("CaculateDamage : %f"), CaculateDamage);
 	OutFinalDamage = StatusManager->TakeDamage(CaculateDamage);
 
-	FVector Direction = GetActorLocation() - Causer->GetActorLocation();
+	FVector Direction = -hit.ImpactNormal; //GetActorLocation() - Causer->GetActorLocation();
+	Direction = FVector(Direction.X, Direction.Y,0);
 	Direction.Normalize();
-	Direction *= ImpactForce*3;
+	Direction *= ImpactForce;
+
 
 	auto playerController = Cast<ABasePlayerController>(Controller);
 	playerController->ChangeStateDel.Broadcast(ECharacterState::E_HIT);
@@ -331,15 +343,18 @@ void ABaseCharacter::TakeDamageFunc(bool& OutIsWeak, int32& OutFinalDamage, AAct
 	case EDamageType::E_KNOCKBACK:
 		TESTLOG(Warning, TEXT("KnockBack"));
 		AnimInst->PlayKnockBack();
-		Direction += GetActorUpVector()*ImpactForce;
-		LaunchCharacter(Direction,false,false);
+		Direction += GetActorUpVector() * 300.0f;
+		TESTLOG(Warning, TEXT("%s"), *Direction.ToString());
+		LaunchCharacter(Direction,true,false);
 		break;
 	case EDamageType::E_KNOCKDOWN:
+		//IsStun = true;
 		AnimInst->PlayKnockBack();
-		Direction += GetActorUpVector()*ImpactForce;
-		LaunchCharacter(Direction, false, false);
+		Direction += GetActorUpVector()*300.0f;
+		LaunchCharacter(Direction, true, false);
 		break;
 	case EDamageType::E_ROAR:
+		AnimInst->PlayHitRoar();
 		RadialBlurOn();
 		break;
 	}
@@ -376,14 +391,20 @@ void ABaseCharacter::WeaponRightOverlapOn() {
 void ABaseCharacter::WeaponRightOverlapOff() {
 	RightHand->SetOverlapEvent(false);
 }
-void ABaseCharacter::OnOverlapBegin(class UPrimitiveComponent* OverlappedComp, class AActor* OtherActor, class UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult) {
-	BlockTarget = OtherActor;
+ECharacterState ABaseCharacter::GetState() const {
+	return CurrentState;
+}
+UDetectComponent* ABaseCharacter::GetLockOnDetect() {
+	return LockOnDetect;
+}
+TArray<UEffectClass*>* ABaseCharacter::GetEffects()
+{
+	return &Effects;
 }
 
-void ABaseCharacter::OnOverlapEnd(class UPrimitiveComponent* OverlappedComp, class AActor* OtherActor, class UPrimitiveComponent* OtherComp, int32 OtherBodyIndex) {
-	BlockTarget = nullptr;
+void ABaseCharacter::SetEffects(UEffectClass* effect) {
+	Effects.Add(effect);
 }
-
 FVector ABaseCharacter::BlockCheck(AActor* Actor) {
 
 	float Height = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
@@ -401,8 +422,6 @@ FVector ABaseCharacter::BlockCheck(AActor* Actor) {
 		ECC_GameTraceChannel3,
 		FCollisionShape::MakeCapsule(Radius, Height),
 		params);
-
-	DrawDebugCapsule(GetWorld(), Location, Height, Radius, Rotation.Quaternion(), FColor::Orange, false, 1.0f);
 
 	FVector Direction = FVector::ZeroVector;
 	float Rate = 1.0f;
@@ -426,31 +445,50 @@ void ABaseCharacter::CharacterChangeState(ECharacterState state){
 
 	switch (CurrentState) {
 		case ECharacterState::E_IDLE:
+			//IsStun = false;
 			GetCharacterMovement()->Activate();
-			IsBlock = true;
+			PutUpWeapon();
+			BlockComp->BlockActive(true);
 			break;
 		case ECharacterState::E_BATTLE:
-			IsBlock = true;
+			BlockComp->BlockActive(true);
 			break;
 		case ECharacterState::E_HIT:
-			IsBlock = false;
+			AnimInst->StopAllMontages(0.0f);
+			SoundEffectComp->PlaySE();
+			BlockComp->BlockActive(false);
 			break;
 		case ECharacterState::E_DOWN:
-			IsBlock = false;
+			BlockComp->BlockActive(false);
 			break;
 		case ECharacterState::E_DEAD:
+			SoundEffectComp->PlaySE();
 			GetCapsuleComponent()->SetCollisionProfileName(FName(TEXT("DEAD")));
 			GetCharacterMovement()->Deactivate();
 			GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-			IsBlock = false;
+			BlockComp->BlockActive(false);
 			break;
 	}
 }
 void ABaseCharacter::SetIsSprint(bool value) {
-	if (value) {
-		GetCharacterMovement()->MaxWalkSpeed = BasicSpeed;
-	}
-	else {
+	IsSprint = value;
+	if (IsSprint) {
+		StatusManager->StaminaUse(ECharacterStaminaUse::E_SPRINT, true);
 		GetCharacterMovement()->MaxWalkSpeed = RunSpeed;
 	}
+	else {
+		StatusManager->StaminaUse(ECharacterStaminaUse::E_SPRINT, false);
+		GetCharacterMovement()->MaxWalkSpeed = BasicSpeed;
+	}
+}
+void ABaseCharacter::SetEvade(bool IsOn) {
+	IsEvade = IsOn;
+}
+void ABaseCharacter::SetMaterialMesh(bool IsOn) {
+	MaterialMesh->SetVisibility(IsOn);
+	MaterialMesh->SetHiddenInGame(!IsOn);
+}
+
+UCharacterIKComponent* ABaseCharacter::GetIK() {
+	return IKComp;
 }

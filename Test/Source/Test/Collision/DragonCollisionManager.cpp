@@ -3,6 +3,7 @@
 
 #include "DragonCollisionManager.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "../Monster/BaseMonster.h"
 #include "Animation/Skeleton.h"
 
 UDragonCollisionManager::UDragonCollisionManager() {
@@ -20,44 +21,50 @@ void UDragonCollisionManager::TickComponent(float DeltaTime, ELevelTick TickType
 
 void UDragonCollisionManager::InitHitBox(UDataTable* data, USkeletalMeshComponent* mesh)
 {
-	TArray<FName> Bones;
-
-	TESTLOG(Warning, TEXT("DragonCollison"));
-
-
-
 	DataTable = data;
 	auto Names = DataTable->GetRowNames();
+
+	auto Physics = mesh->SkeletalMesh->PhysicsAsset;
+	auto body = Physics->SkeletalBodySetups;
+
+	TArray<FName> Parts;
+
+	for (auto element : body) {
+		Parts.Add(element->BoneName);
+	}
+
+
 	for (auto name : Names) {
 		auto row = DataTable->FindRow<FMonsterParts>(name, FString(TEXT("Init Hit box Parts data")));
 
-		TArray<FName> Parts;
-		SearchChild(mesh, row->PartRootBoneName, Parts, Bones);
-		if (HitBox.Contains(row->Part)) {
-			HitBox[row->Part]->GetBones().Append(Parts);
-		}
-		else {
-			auto CollisionPart = NewObject<UHitCollisionPart>();
-			CollisionPart->SetUpData(*row, Parts);
+		SearchChild(mesh, row->PartRootBoneName, row->Part);
 
-			HitBox.Add(row->Part, CollisionPart);
+		auto CollisionPart = NewObject<UHitCollisionPart>();
+		CollisionPart->SetUpData(*row);
+
+		for (auto Label : PartLabel) {
+			if (Parts.Contains(Label.Key)&&!HitBox.Contains(Label.Key)) {
+				HitBox.Add(Label.Key, CollisionPart);
+				HitBoxLabel.Add(row->Part, CollisionPart);
+			}
 		}
 	}
-		
-}
-bool UDragonCollisionManager::ReceiveDamage(const FHitResult& hit, const FName socketName,float dmg, int32& outDmage, bool& weak) {
-	for (auto element : HitBox) {
-		int32 TempDamage = 0;
-		bool IsBroken = false;
-		//Success Attack
-		if (element.Value->CheckGetDamageThisPart(hit, socketName, dmg, TempDamage, IsBroken, element.Key, weak)) {
-
-			outDmage = TempDamage;
-
-			return true;
+	for (auto part : body) {
+		if (part->AggGeom.SphylElems.Num() > 0) {
+			DamageBox.Add(PartLabel[part->BoneName], part);
 		}
-		outDmage = TempDamage;
+	}
 
+}
+bool UDragonCollisionManager::ReceiveDamage(const FHitResult& hit, const FName socketName,float dmg, int32& outDamage, bool& weak) {
+	FName BoneName = socketName;
+	if (!HitBox.Contains(BoneName)) return false;
+
+	auto PartStatus = HitBox[BoneName];
+
+	if (PartStatus->CheckGetDamageThisPart(dmg, outDamage, weak)) {
+		Cast<ABaseMonster>(hit.Actor)->SetBrokenState(PartStatus->GetPart());
+		return true;
 	}
 	return false;
 }

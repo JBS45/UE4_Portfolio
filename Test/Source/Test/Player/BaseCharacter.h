@@ -9,13 +9,21 @@
 #include "BaseCharAnimInstance.h"
 #include "../Components/CharacterStatusManager.h"
 #include "GameFramework/Character.h"
-#include "../Collision/HumanCollisionManager.h"
-#include "../Components/DamageInterface.h"
+#include "../Components/MyInterface.h"
+#include "../EffectClass.h"
 #include "BaseCharacter.generated.h"
+
+
 
 class ABaseWeapon;
 class UDetectComponent;
 class UPostProcessComponent;
+class UCharacterIKComponent;
+class UCharacterBlockComponent;
+class UPostProcessComponent;
+class UDetectComponent;
+class USoundEffectComponent;
+class UEffectClass;
 
 UCLASS()
 class TEST_API ABaseCharacter : public ACharacter, public IDamageInterface
@@ -31,6 +39,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void PostInitializeComponents() override;
+	virtual void PossessedBy(AController * NewController) override;
 
 public:	
 	// Called every frame
@@ -57,38 +66,52 @@ private:
 
 
 	class USkeletalMesh* TempMesh;
-	UPROPERTY(VisibleAnywhere, Category = "Collision")
-		UHumanCollisionManager* CollisionManager;
+	UPROPERTY(VisibleAnywhere, Category = "Material")
+		USkeletalMeshComponent* MaterialMesh;
 	UPROPERTY(VisibleAnywhere, Category = "Status")
 		UCharacterStatusManager* StatusManager;
 	UPROPERTY(VisibleAnywhere, Category = "Animation")
 		UBaseCharAnimInstance* AnimInst;
 	UPROPERTY(VisibleAnywhere, Category = "Detect")
-		class UDetectComponent* Detect;
+		UDetectComponent* LockOnDetect;
+	UPROPERTY(EditAnywhere, Category = "Animation")
+		UCharacterIKComponent* IKComp;
+	UPROPERTY(VisibleAnywhere, Category = "Block")
+		UCharacterBlockComponent* BlockComp;
 	UPROPERTY(VisibleAnywhere, Category = "PostProcess")
-		class UPostProcessComponent* PostProcessMat;
+		UPostProcessComponent* PostProcessMat;
+	UPROPERTY(VisibleAnywhere, Category = "Sound")
+		USoundEffectComponent* SoundEffectComp;
+	UPROPERTY(VisibleAnywhere, Category = "Effect")
+		TArray<UEffectClass*> Effects;
 
 	bool IsAlive = true;
+	bool IsSprint = false;
+	bool IsEvade = false;
+	bool IsSpecial = false;
 
-	float CheckBattleTime = 0.0f;
+	
+
+
 	float DetectRange = 2000.0f;
-	bool IsBlock = false;
 
 	AActor* BlockTarget;
+
 
 public:
 	UPROPERTY(VisibleAnywhere, Category = "Camera")
 		USpringArmComponent* SpringArm;
 	UPROPERTY(VisibleAnywhere, Category = "Camera")
 		UCameraComponent* Camera;
+	UPROPERTY(VisibleAnywhere, Category = "Camera")
+		float CameraSpeed = 10.0f;
+	UPROPERTY(VisibleAnywhere, Category = "Camera")
+		float CurrentSpringArmLength = 500.0f;
+
 
 	float MinCameraDistance = 150;
 	float MaxCameraDistance = 600;
 
-	UPROPERTY(VisibleAnywhere, Category = "Camera")
-		float CurrentSpringArmLength;
-	UPROPERTY(VisibleAnywhere, Category = "Camera")
-		float WheelSpeed;
 
 	FVector BaseCameraVector;
 	FRotator BaseCameraRotator;
@@ -98,33 +121,36 @@ public:
 public:
 	void MoveForward(float NewAxisValue);
 	void MoveRight(float NewAxisValue);
-	void CameraZoom(float NewAxisValue);
 	void MoveCameraMaxDist();
 	void CameraLockUp(float NewAxisValue);
 	void CameraTurn(float NewAxisValue);
 
 	void Sprint(bool sprint);
-	void Evade();
-
-
 public:
 	FORCEINLINE UBaseCharAnimInstance* GetAnimInst();
+	FORCEINLINE UDetectComponent* GetLockOnDetect();
 	FORCEINLINE EWeaponType GetWeaponState();
 	FORCEINLINE UCharacterStatusManager* GetCharacterStatus();
+	FORCEINLINE UCharacterIKComponent* GetIK();
 	FORCEINLINE bool GetIsAlive() const;
 	FORCEINLINE class ABaseWeapon* GetLeftHand();
 	FORCEINLINE class ABaseWeapon* GetRightHand();
+	FORCEINLINE void SetEvade(bool IsOn);
+	FORCEINLINE ECharacterState GetState() const;
+	FORCEINLINE TArray<UEffectClass*>* GetEffects();
+	FORCEINLINE void SetEffects(UEffectClass* effect);
 
 	void SetIsSprint(bool value);
 	void ChangeWeapon(EWeaponType type);
 	void CharacterChangeState(ECharacterState state);
 
-	TArray<APawn*> GetTargetMonster();
 	void CameraLockOn(class ABaseMonster* target);
 	float GetDetectRange() {return DetectRange;}
 	void SetInitWeapon();
 	void DrawWeapon();
 	void PutUpWeapon();
+
+	void CharacterOverlapOtherActor(float delta);
 	FORCEINLINE void WeaponLeftOverlapOn();
 	FORCEINLINE void WeaponLeftOverlapOff();
 	FORCEINLINE void WeaponRightOverlapOn();
@@ -133,14 +159,11 @@ public:
 	bool CaculateCritical();
 	void RadialBlurOn();
 	void RadialBlurOff();
+	void SetMaterialMesh(bool IsOn);
 
 	virtual void ApplyDamageFunc(const FHitResult& hit, const float AcitonDamageRate, const EDamageType DamageType = EDamageType::E_NORMAL, const float ImpactForce = 0);
 	virtual void TakeDamageFunc(bool& OutIsWeak, int32& OutFinalDamage, AActor* Causer, const FHitResult& hit, const float CaculateDamage, const EDamageType DamageType = EDamageType::E_NORMAL, const float ImpactForce = 0);
-private:
-	UFUNCTION()
-		virtual void OnOverlapBegin(class UPrimitiveComponent* OverlappedComp, class AActor* OtherActor, class UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
-	UFUNCTION()
-		virtual void OnOverlapEnd(class UPrimitiveComponent* OverlappedComp, class AActor* OtherActor, class UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
+
 private:
 	FVector BlockCheck(AActor* Actor);
 	void Blocking(float delta);

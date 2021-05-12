@@ -3,7 +3,8 @@
 
 #include "DetectComponent.h"
 #include "Components/SphereComponent.h"
-#include "DrawDebugHelpers.h"
+#include "../Monster/BaseMonster.h"
+#include "Kismet/KismetMathLibrary.h"
 
 // Sets default values for this component's properties
 UDetectComponent::UDetectComponent()
@@ -13,10 +14,10 @@ UDetectComponent::UDetectComponent()
 	PrimaryComponentTick.bCanEverTick = true;
 
 	// ...
-	DetectRange = CreateDefaultSubobject<USphereComponent>("Detect");
-	IsValid = false;
-
-	
+	DetectSphere = CreateDefaultSubobject<USphereComponent>("Detect");
+	Range = 2500.0f;
+	CollisonProfile = FName("DetectMonster");
+	LockOnTarget = nullptr;
 }
 
 
@@ -26,7 +27,8 @@ void UDetectComponent::BeginPlay()
 	Super::BeginPlay();
 
 	// ...
-	
+	CurrentTargetsIndex = 0;
+	SetDetectSphere();
 }
 
 
@@ -36,53 +38,99 @@ void UDetectComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActo
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
 	// ...
+	CheckTargets();
+	CheckLockOnTarget();
 }
 
-void UDetectComponent::SetDetectRange(float range, EDetectCollisionType collison)
+void UDetectComponent::SetDetectSphere()
 {
-	SetOverlapType(collison);
-	DetectRange->SetCollisionObjectType(ECC_GameTraceChannel1);
-	DetectRange->OnComponentBeginOverlap.AddDynamic(this, &UDetectComponent::OnOverlapBegin);
-	DetectRange->OnComponentEndOverlap.AddDynamic(this, &UDetectComponent::OnOverlapEnd);
-	DetectRange->SetSphereRadius(range);
-	Range = range;
-	IsValid = true;
+
+	DetectSphere->OnComponentBeginOverlap.AddDynamic(this, &UDetectComponent::OnOverlapBegin);
+	DetectSphere->OnComponentEndOverlap.AddDynamic(this, &UDetectComponent::OnOverlapEnd);
+
+	DetectSphere->SetSphereRadius(Range);
+
+	DetectSphere->SetCollisionProfileName(CollisonProfile);
+	DetectSphere->AttachToComponent(GetOwner()->GetRootComponent(),FAttachmentTransformRules::KeepRelativeTransform);
+
 }
 
-void UDetectComponent::DrawDebug(APawn* pawn, float deltaTime) {
-	if (!IsValid) return;
-
-#if ENABLE_DRAW_DEBUG
-	//DrawDebugSphere(GetWorld(), pawn->GetActorLocation(), Range, 10, FColor::Red, false, 0.5f);
-#endif
-}
-
-void UDetectComponent::SetOverlapType(EDetectCollisionType collison)
-{
-	switch (collison) {
-	case EDetectCollisionType::E_PLAYER:
-		DetectRange->SetCollisionProfileName(TEXT("DetectPlayer"));
-		break;
-	case EDetectCollisionType::E_MONSTER:
-		DetectRange->SetCollisionProfileName(TEXT("DetectMonster"));
-		break;
-	default:
-		break;
-	}
-}
 void UDetectComponent::OnOverlapBegin(class UPrimitiveComponent* OverlappedComp, class AActor* OtherActor, class UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult) {
-	auto target = Cast <APawn>( OtherActor);
-	if (target!=nullptr) {
+	auto target = Cast <ABaseMonster>( OtherActor);
+	if (target!=nullptr && target->GetIsAlive()) {
 		Targets.Add(target);
-		TESTLOG(Warning, TEXT("%d"), Targets.Num());
+		TESTLOG(Warning,TEXT("%s"),*target->GetName())
 	}
 }
 void UDetectComponent::OnOverlapEnd(class UPrimitiveComponent* OverlappedComp, class AActor* OtherActor, class UPrimitiveComponent* OtherComp, int32 OtherBodyIndex) {
-	auto target = Cast <APawn>(OtherActor);
+	auto target = Cast <ABaseMonster>(OtherActor);
 	if (target != nullptr) {
 		if (Targets.Contains(target)) {
 			Targets.Remove(target);
-			TESTLOG(Warning, TEXT("%d"), Targets.Num());
 		}
+	}
+}
+void UDetectComponent::LockOnCamera()
+{
+	if (Targets.Num() <= 0) return;
+
+	if (LockOnTarget==nullptr) {
+		CurrentTargetsIndex = 0;
+		if (Targets[CurrentTargetsIndex]==nullptr) return;
+	}
+
+	LockOnTarget = Targets[CurrentTargetsIndex];
+	IsLockOn = true;
+	Notify();
+
+}
+void UDetectComponent::LockOff()
+{
+	IsLockOn = false;
+	Notify();
+}
+void UDetectComponent::SwitchingCamera() 
+{
+	if (IsLockOn == false
+		|| Targets.Num() <= 1) return;
+
+	CurrentTargetsIndex++;
+	if (CurrentTargetsIndex >= Targets.Num()) {
+		CurrentTargetsIndex = 0;
+	}
+	LockOnTarget = Targets[CurrentTargetsIndex];
+	Notify();
+}
+void UDetectComponent::CheckTargets() {
+	if (Targets.Num() <= 0) return;
+
+	for (int i = 0; i < Targets.Num();++i) {
+		if (Targets[i]->GetIsAlive() == false) {
+			Targets.RemoveAt(i);
+			i--;
+		}
+	}
+}
+
+void UDetectComponent::CheckLockOnTarget() {
+	if (IsLockOn) {
+		if (!Targets.Contains(LockOnTarget)) {
+			IsLockOn = false;
+			LockOnTarget = nullptr;
+			Notify();
+		}
+	}
+}
+ABaseMonster* UDetectComponent::GetLockTarget() {
+	return LockOnTarget;
+}
+
+void UDetectComponent::Attach(ICameraLockOnInterface* obserever) {
+	LockOnObservers.Add(obserever);
+}
+
+void UDetectComponent::Notify() {
+	for (auto observer : LockOnObservers) {
+		observer->NotifyLockOnData(IsLockOn, LockOnTarget);
 	}
 }

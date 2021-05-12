@@ -25,6 +25,7 @@ protected:
 
 	TArray<UImage*> CommandImages;
 	UTextBlock* CommandName;
+	UTextBlock* KeyName;
 
 	TArray<UTexture2D*> ImageArray;
 	UTexture2D* PlusImage;

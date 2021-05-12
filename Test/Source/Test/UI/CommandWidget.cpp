@@ -2,6 +2,7 @@
 
 
 #include "CommandWidget.h"
+#include "../BaseStatus.h"
 
 
 UCommandWidget::UCommandWidget(const FObjectInitializer& objectInitializer) : Super(objectInitializer) {
@@ -13,7 +14,9 @@ void UCommandWidget::NativeConstruct() {
 	CommandImages.Add(Cast<UImage>(GetWidgetFromName("Move2")));
 	CommandImages.Add(Cast<UImage>(GetWidgetFromName("Plus")));
 	CommandImages.Add(Cast<UImage>(GetWidgetFromName("Action")));
+	CommandImages.Add(Cast<UImage>(GetWidgetFromName("Key")));
 	CommandName = Cast<UTextBlock>(GetWidgetFromName("CommandName"));
+	KeyName = Cast<UTextBlock>(GetWidgetFromName("KeyText"));
 
 
 }
@@ -23,13 +26,16 @@ void UCommandWidget :: HideWidget() {
 		image->SetVisibility(ESlateVisibility::Hidden);
 	}
 	CommandName->SetVisibility(ESlateVisibility::Hidden);
+	KeyName->SetVisibility(ESlateVisibility::Hidden);
 
 }
 void UCommandWidget :: SetCommand(FString commandName, TArray<EMoveKey> move, TArray<EActionKey> Action) {
-	CommandName->SetVisibility(ESlateVisibility::Visible);
-	CommandName->SetText(FText::FromString(commandName));
+	if (Action.Num() > 0) {
+		CommandName->SetVisibility(ESlateVisibility::Visible);
+		CommandName->SetText(FText::FromString(commandName));
 
-	SetImage(move, Action);
+		SetImage(move, Action);
+	}
 }
 
 void UCommandWidget::LoadImage() {
@@ -85,8 +91,14 @@ void UCommandWidget::LoadImage() {
 	
 }
 void UCommandWidget::SetImage(TArray<EMoveKey> move, TArray<EActionKey> Action) {
-	CommandImages[3]->SetVisibility(ESlateVisibility::Visible);
-	CommandImages[3]->Brush.SetResourceObject(SelectImage(Action));
+	if (Action[0] == EActionKey::E_SPECIAL) {
+		CommandImages[4]->SetVisibility(ESlateVisibility::Visible);
+		KeyName->SetVisibility(ESlateVisibility::Visible);
+	}
+	else {
+		CommandImages[3]->SetVisibility(ESlateVisibility::Visible);
+		CommandImages[3]->Brush.SetResourceObject(SelectImage(Action));
+	}
 	if(move.Num()>0) {
 
 		for (int i = 0; i < move.Num(); ++i) {

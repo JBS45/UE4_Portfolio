@@ -30,9 +30,12 @@ private:
 	virtual void NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation, float FrameDeltaTime) override;
 	virtual void NotifyEnd(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation) override;
 
+private:
+	UPROPERTY(EditAnywhere, Category = "InputBufferState", meta = (AllowPrivateAccess = "true"))
+		bool IsOpen = true;
 };
 UCLASS()
-class TEST_API UInputBufferClose : public UAnimNotify
+class TEST_API UInputBufferOpen: public UAnimNotify
 {
 	GENERATED_BODY()
 
@@ -43,7 +46,7 @@ private:
 
 };
 UCLASS()
-class TEST_API UAnimChainReset : public UAnimNotify
+class TEST_API UInputBufferClose : public UAnimNotify
 {
 	GENERATED_BODY()
 

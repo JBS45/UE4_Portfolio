@@ -6,7 +6,7 @@
 #include "../BaseEnum.h"
 #include "BaseCharacter.h"
 #include "../UI/BaseWidget.h"
-#include "../Assistant/BaseAssistant.h"
+#include "../Components/MyInterface.h"
 #include "GameFramework/PlayerController.h"
 #include "BasePlayerController.generated.h"
 
@@ -14,7 +14,7 @@ class UInputBufferManager;
 class UComandTableManager;
 
 UCLASS()
-class TEST_API ABasePlayerController : public APlayerController
+class TEST_API ABasePlayerController : public APlayerController,public ICameraLockOnInterface
 {
 	GENERATED_BODY()
 
@@ -23,6 +23,7 @@ public:
 	
 	virtual void SetupInputComponent() override;
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaTime) override;
 	virtual void OnPossess(APawn* pawn) override;
 private:
 	UPROPERTY(VisibleAnywhere, Category = "Character")
@@ -31,6 +32,8 @@ private:
 		EWeaponType CurrentWeapon;
 	UPROPERTY(VisibleAnywhere, Category = "State")
 		ECharacterState CharacterState;
+	UPROPERTY(VisibleAnywhere, Category = "State")
+		ECharacterState PreState;
 	UPROPERTY(VisibleAnywhere, Category = "Input")
 		UInputBufferManager* InputBuffer;
 	UPROPERTY(VisibleAnywhere, Category = "Input")
@@ -46,6 +49,9 @@ private:
 	bool CanMove = true;
 	bool IsSprint = false;
 	bool IsSpecial = false;
+
+	FInputActionBinding EKey;
+	FInputActionBinding MouseThumbKey;
 
 
 public:
@@ -71,14 +77,22 @@ public:
 	void ChangeLockOnTarget();
 
 	void CameraLockOn(float deltaTime);
+	void ToggleSpecial();
+	void SpecialOn();
+	void SpecialOff();
+	void PlayCharacter();
 public:
+	virtual void NotifyLockOnData(bool IsLockOn, ABaseMonster* Target) override;
+	void AttachWidgetToViewport(TSubclassOf<class UBaseWidget> widget);
+
 	void ChangeCharacterState(ECharacterState state);
 	void ChangeWeapon(EWeaponType type);
+	void PossessInit(APawn* newPawn);
 	UInputBufferManager* GetInputBuffer();
 	class ABaseMonster* GetTarget();
+	FORCEINLINE ECharacterState GetPreState() const;
 
 private:
-	void AttachWidgetToViewport(TSubclassOf<class UBaseWidget> widget);
 	FORCEINLINE void OnDead();
 	FORCEINLINE void NoStatmina();
 
@@ -90,5 +104,6 @@ private:
 	void ReleaseD();
 	void PressA();
 	void ReleaseA();
+	void Special();
 
 };

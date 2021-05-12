@@ -2,6 +2,8 @@
 
 
 #include "MonsterStatusManager.h"
+#include "../Monster/BaseMonster.h"
+#include "../Monster/MonsterAIController.h"
 
 // Sets default values for this component's properties
 UMonsterStatusManager::UMonsterStatusManager()
@@ -43,6 +45,9 @@ void UMonsterStatusManager::SetStatus(float maxHp, float baseDamage)
 void UMonsterStatusManager::TakeDamage(const int32 acculateDamage) {
 	CurrentHP -= (float)acculateDamage;
 	TESTLOG(Warning, TEXT("Current : %f, MAX : %f"), CurrentHP, MaxHP);
+	if (CurrentHP <= HPPERCENT(40)) {
+		ChangePhase();
+	}
 	if (CurrentHP <= 0) {
 		DeadDel.Broadcast();
 	}
@@ -55,5 +60,10 @@ void UMonsterStatusManager::SetBrokenState(EMonsterBrokenParts broken)
 }
 float UMonsterStatusManager::GetDamage() {
 	return BaseDamage;
+}
+
+void UMonsterStatusManager::ChangePhase() {
+	auto Controller = Cast<ABaseMonster>(GetOwner())->GetMonsterController();
+	Controller->StateChangeDel.Broadcast(EMonsterState::E_RAGE);
 }
 

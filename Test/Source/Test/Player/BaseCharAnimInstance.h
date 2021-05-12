@@ -33,27 +33,41 @@ private:
 		float CharSpeed;
 
 
-	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "Evade", meta = (AllowPrivateAccess = "true"))
-		UAnimMontage* Evade;
-	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "Evade", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "CommonAnim", meta = (AllowPrivateAccess = "true"))
 		UAnimMontage* KnockBack;
-	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "Attacks", meta = (AllowPrivateAccess = "true"))
-		TArray<class UAnimMontage*> LeftAttackDualAnims;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Character", meta = (AllowPrivateAccess = "true"))
-		bool CanAttack;
-	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "Skills", meta = (AllowPrivateAccess = "true"))
-		TArray<UAnimMontage*> SkillAttackDualAnims;
-
+	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "CommonAnim", meta = (AllowPrivateAccess = "true"))
+		UAnimMontage* HitRoar;
+	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "CommonAnim", meta = (AllowPrivateAccess = "true"))
+		UAnimMontage* GetUp;
+	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "CommonAnim", meta = (AllowPrivateAccess = "true"))
+		UAnimMontage* StunGetUp;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon", meta = (AllowPrivateAccess = "true"))
 		EWeaponType CurrentWeapon;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "IK", meta = (AllowPrivateAccess = "true"))
+		FRotator LeftFootRotation;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "IK", meta = (AllowPrivateAccess = "true"))
+		FRotator RightFootRotation;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "IK", meta = (AllowPrivateAccess = "true"))
+		float LeftFootIKValue;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "IK", meta = (AllowPrivateAccess = "true"))
+		float RightFootIKValue;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "IK", meta = (AllowPrivateAccess = "true"))
+		float HipOffset;
+
+private:
+	bool IsPlayingMontageAnim = false;
 private:
 	float MakeCharSpeed(APawn* pawn);
+	void CheckMontagePlaying();
 public:
+	FVoidDelegate ChainResetDel;
+
 	void ExchangeWeapon(EWeaponType type);
 	void PlayAnimMontage(UAnimMontage* montage);
-	void PlayEvade();
 	void PlayKnockBack();
+	void PlayHitRoar();
+	void PlayGetUp();
 
 	void CharacterChangeState(ECharacterState state);
 	void ChangeWeapon(EWeaponType type);

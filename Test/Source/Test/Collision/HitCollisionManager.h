@@ -10,7 +10,7 @@
 
 class USkeletalMeshComponent;
 
-UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent), abstract )
+UCLASS()
 class TEST_API UHitCollisionManager : public UActorComponent
 {
 	GENERATED_BODY()
@@ -20,23 +20,24 @@ public:
 	UHitCollisionManager();
 
 protected:
-	TMap<EMonsterPartsType, UHitCollisionPart*> HitBox;
-	TArray<FString> HitBoxKey;
+	TMap<FName, UHitCollisionPart*> HitBox;
+	TMap<EMonsterPartsType, UHitCollisionPart*> HitBoxLabel;
+	TMap<FName, EMonsterPartsType> PartLabel;
+	TMap<EMonsterPartsType, USkeletalBodySetup*> DamageBox;
 	UDataTable* DataTable;
 protected:
 	// Called when the game starts
 	virtual void BeginPlay() override;
-
+	void SearchChild(USkeletalMeshComponent* mesh, FName CurrentBone, EMonsterPartsType type);
 public:		
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction * ThisTickFunction) override;
 	//virtual Hit Check
 	virtual void InitHitBox(UDataTable* data,USkeletalMeshComponent* mesh);
 	virtual bool ReceiveDamage(const FHitResult& hit, const FName socketName, float dmg, int32& OutDamage, bool& weak);
-	FORCEINLINE TMap<EMonsterPartsType, UHitCollisionPart*> GetHitBox();
-protected:
-	void SearchChild(USkeletalMeshComponent* mesh, FName CurrentBone, TArray<FName>& Part, TArray<FName>& Bones);
+	virtual void BrokenPart(EMonsterPartsType type);
+	FORCEINLINE USkeletalBodySetup* GetBoneNames(const EMonsterPartsType part) const;
 };
-UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
+UCLASS()
 
 class TEST_API UHitCollisionPart : public UObject {
 	GENERATED_BODY()
@@ -50,10 +51,10 @@ private:
 	float TotalDamage;
 	float DestroyDamage;
 	float Defence;
-	TArray<FName> Bones;
 
 public:
-	void SetUpData(const FMonsterParts data, TArray<FName> PartBone);
-	bool CheckGetDamageThisPart(const FHitResult& hit,const FName socketName, float dmg, int32& OutDamage, bool& broken, EMonsterPartsType& part, bool& weak);
-	FORCEINLINE TArray<FName> GetBones();
+	void SetUpData(const FMonsterParts data);
+	void SetBroken();
+	bool CheckGetDamageThisPart(float dmg, int32& OutDamage, bool& weak);
+	EMonsterPartsType GetPart();
 };

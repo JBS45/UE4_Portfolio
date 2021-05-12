@@ -13,7 +13,7 @@ UComandTableManager::UComandTableManager()
 	CurrentWeapon = EWeaponType::E_NOWEAPON;
 
 	LoadCommandTable(TEXT("DataTable'/Game/DataTable/Command/TotalCommandTable.TotalCommandTable'"));
-	CurrentCommandName = "Base";
+	CurrentCommandName = ECommandName::E_BASE;
 }
 
 
@@ -21,16 +21,18 @@ UComandTableManager::UComandTableManager()
 void UComandTableManager::BeginPlay()
 {
 	Super::BeginPlay();
-}
-TArray<FString> UComandTableManager::FindEnableAction(FString currentActionName) 
-{
-	auto EnableActionNames = CurrentCommands->Find(currentActionName)->EnableChainAction;
 
-	//Connect HUD
+}
+TArray<ECommandName> UComandTableManager::FindEnableAction(ECommandName currentActionName)
+{
+	TArray<ECommandName> EnableActionNames;
+
+	EnableActionNames = CurrentCommands->Find(currentActionName)->EnableChainAction;
+	
 	return EnableActionNames;
 }
 
-UAnimMontage* UComandTableManager::FindAnmation(FString actionName) {
+UAnimMontage* UComandTableManager::FindAnmation(ECommandName actionName) {
 	return CurrentCommands->Find(actionName)->ActionMontage;
 }
 
@@ -53,13 +55,13 @@ void UComandTableManager::LoadCommandTable(const FString ref)
 			auto CommandTable = TmpTable->FindRow<FTotalCommandDataTable>(name, ContextString, true)->CommandTable;
 			auto type = TmpTable->FindRow<FTotalCommandDataTable>(name, ContextString, true)->weapon;
 			
-			TMap<FString, FChainAction> Commands;
+			TMap<ECommandName, FChainAction> Commands;
 
 			for (auto rowName : CommandTable->GetRowNames()) 
 			{
 				auto TempActionChain = CommandTable->FindRow<FChainActionTable>(rowName, ContextString, true)->Action;
 
-				Commands.Add(TempActionChain.AttackName, TempActionChain);
+				Commands.Add(TempActionChain.AttackType, TempActionChain);
 			}
 			TotalCommands.Add(type, Commands);
 		}
@@ -81,30 +83,48 @@ void UComandTableManager::ChangeCommandTable(EWeaponType weapon)
 		CurrentCommands = &TotalCommands[EWeaponType::E_DUAL];
 		break;
 	}
-	EnableAction = FindEnableAction("Base");
-	SetCurrentCommandName("Base");
+	EnableAction = FindEnableAction(ECommandName::E_BASE);
+	SetCurrentCommandName(ECommandName::E_BASE);
 }
 
-void UComandTableManager::SetCurrentCommandName(FString commandName) 
+void UComandTableManager::SetCurrentCommandName(ECommandName commandName)
 {
 	CurrentCommandName = commandName;
 	if (CurrentCommands == nullptr) {
 		CurrentCommands = &TotalCommands[EWeaponType::E_NOWEAPON];
 	}
 	EnableAction = CurrentCommands->Find(CurrentCommandName)->EnableChainAction;
+	
 
 	TArray<FChainAction> Result;
 	for (auto action : EnableAction) {
 		Result.Add(FindAction(action));
 	}
 
-	NewActionChainDel.Execute(Result);
+	Notify(commandName);
 }
 bool UComandTableManager::ValidCurrentCommandName() const 
 {
 	return (CurrentCommands->Num() > 0);	
 }
-FChainAction UComandTableManager::FindAction(FString actionName) 
+FChainAction UComandTableManager::FindAction(ECommandName actionName)
 {
 	return *CurrentCommands->Find(actionName);
+}
+void UComandTableManager::SetSpecial(bool IsOn) {
+	IsSpecial = IsOn;
+}
+void UComandTableManager::Attach(IChainInterface* newObserver) {
+
+	ChainObservers.Add(newObserver);
+}
+void UComandTableManager::Notify(ECommandName currentActionName) {
+	TArray<FChainAction> Chains;
+	auto  Temp = FindEnableAction(currentActionName);
+	for (auto temp : Temp) {
+		Chains.Add(*CurrentCommands->Find(temp));
+	}
+	for (auto observer : ChainObservers) {
+		observer->NotifyChainData(Chains);
+	}
 }
